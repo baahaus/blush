@@ -299,31 +299,35 @@ Analyze pending changes for security vulnerabilities...
 
 ## Implementation Phases
 
-### Phase 1 -- Foundation (this session)
+### Phase 1 -- Foundation
 - [x] PLAN.md
-- [ ] Monorepo scaffold (turborepo, tsconfig, package.json)
-- [ ] @ap/ai -- Anthropic provider with streaming + tool calling
-- [ ] @ap/core -- Agent loop with 4 core tools
-- [ ] @ap/tui -- Basic streaming output + input
-- [ ] @ap/cli -- `ap` binary that runs interactive sessions
-- [ ] First working REPL: `ap` launches, accepts input, calls Claude, executes tools
+- [x] Monorepo scaffold (turborepo, tsconfig, package.json)
+- [x] @ap/ai -- Anthropic + OpenAI providers with streaming + tool calling
+- [x] @ap/core -- Agent loop with 4 core tools
+- [x] @ap/tui -- Basic streaming output + input
+- [x] @ap/cli -- `ap` binary that runs interactive sessions
+- [x] First working REPL: `ap` launches, accepts input, calls Claude, executes tools
 
 ### Phase 2 -- Commands & Sessions
-- [ ] JSONL session storage with branching
-- [ ] /btw implementation
-- [ ] /compact with focus instructions
-- [ ] /branch conversation forking
-- [ ] /context visualization
-- [ ] /model switching
-- [ ] Session resume
+- [x] JSONL session storage with branching
+- [x] /btw implementation with interactive keypress-dismiss overlay
+- [x] /compact with focus instructions
+- [x] /branch conversation forking
+- [x] /context visualization (colored proportional bar)
+- [x] /model mid-session switching
+- [x] Session resume (--resume, --session, auto-save)
+- [x] Config file auth (~/.ap/config.json, .env, env vars)
+- [x] CLI bundles workspace deps for standalone execution
 
 ### Phase 3 -- Team
-- [ ] @ap/team package
-- [ ] Git worktree isolation
-- [ ] Mailbox system
-- [ ] Task queue
-- [ ] /team commands
-- [ ] Consensus patterns (synthesis, review)
+- [x] @ap/team package
+- [x] Git worktree isolation (createWorktree, mergeWorktree)
+- [x] Mailbox system (file-based, broadcast, structured types)
+- [x] Task queue (create, claim, complete, dependencies, auto-unblock)
+- [x] /team commands (spawn, msg, status, synthesize, merge)
+- [x] Consensus patterns (synthesis via LLM)
+- [ ] Review pattern (agent reviews another's output before merge)
+- [ ] Pipeline pattern (sequential handoff)
 
 ### Phase 4 -- Ecosystem
 - [ ] Extension loading + API
@@ -377,5 +381,55 @@ Analyze pending changes for security vulnerabilities...
 
 ---
 
+## Progress Log
+
+### 2026-04-01 -- Initial Build (Phases 1-3)
+
+**Commits:**
+
+1. `e434bb1` -- Initial commit: 5-package monorepo scaffold, all source code
+   - @ap/ai: Anthropic + OpenAI providers, streaming, tool calling, token tracking, registry
+   - @ap/core: Agent loop, 4 core tools (read/write/edit/bash), JSONL sessions, context assembly
+   - @ap/tui: Streaming markdown, syntax highlighting, status bar, input handling
+   - @ap/cli: `ap` binary with /btw, /compact, /context, /branch, /model, print mode
+   - @ap/team: Worktree isolation, mailbox system, task queue, coordinator, synthesis
+
+2. `3949604` -- Config file auth, session resume, interactive /btw overlay
+   - Multi-source API key resolution (~/.ap/config.json, .env, env vars)
+   - Session persistence: --resume, --session, auto-save, SIGINT save
+   - Interactive /btw overlay with keypress dismiss
+   - CLI bundles workspace deps for standalone node execution
+
+3. `6f3aa71` -- Wire /team commands into CLI
+   - /team spawn, msg, status, synthesize, merge wired to @ap/team
+   - Team status shows agents, branches, tasks with color coding
+
+4. `(current)` -- README.md, PLAN.md progress log
+   - Public-facing README with install, usage, architecture
+   - Updated all phase checklists
+   - Added this progress log
+
+**What works:**
+- `ap --help`, `ap --version` -- binary runs standalone
+- `ap -p "question"` -- print mode (needs API key)
+- `ap` -- interactive REPL with all commands
+- `ap sessions` -- list sessions for cwd
+- All 5 packages build clean in ~3s
+- Error messages guide users to set up auth
+
+**What needs API key to test:**
+- Full agent loop (send -> LLM -> tool calls -> loop)
+- /btw ephemeral questions
+- /compact conversation compression
+- /team spawn (needs working agent + git repo)
+- /team synthesize (needs multiple agent outputs)
+
+**Known issues:**
+- tsup banner adds shebang to all output files, not just bin.js
+- No `chmod +x` on bin.js after build
+- Session resume mutates agent.session directly (should use a proper load path)
+
+---
+
 *Last updated: 2026-04-01*
-*Status: Phase 1 -- Foundation*
+*Status: Phase 3 complete -- moving to Phase 4 (Ecosystem)*
