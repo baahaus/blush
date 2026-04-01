@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
-const AP_CONFIG_PATH = join(homedir(), '.ap', 'config.json');
+const BLUSH_CONFIG_PATH = join(homedir(), '.blush', 'config.json');
 
 export interface ApConfig {
   anthropic_api_key?: string;
@@ -16,10 +16,10 @@ let cached: ApConfig | null = null;
 export function loadConfig(): ApConfig {
   if (cached) return cached;
 
-  // Try ~/.ap/config.json
-  if (existsSync(AP_CONFIG_PATH)) {
+  // Try ~/.blush/config.json
+  if (existsSync(BLUSH_CONFIG_PATH)) {
     try {
-      cached = JSON.parse(readFileSync(AP_CONFIG_PATH, 'utf-8'));
+      cached = JSON.parse(readFileSync(BLUSH_CONFIG_PATH, 'utf-8'));
       return cached!;
     } catch {
       // ignore malformed config

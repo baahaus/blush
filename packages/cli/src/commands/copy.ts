@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import { execSync } from 'node:child_process';
-import type { Message, ContentBlock } from '@ap/ai';
-import { renderLine, renderError } from '@ap/tui';
+import type { Message, ContentBlock } from '@blush/ai';
+import { renderLine, renderError } from '@blush/tui';
 
 function extractText(message: Message): string {
   if (typeof message.content === 'string') return message.content;

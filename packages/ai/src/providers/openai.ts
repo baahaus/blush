@@ -84,7 +84,7 @@ export function createOpenAIProvider(config: ProviderConfig): Provider {
     throw new Error(
       'OpenAI API key required. Set it via:\n' +
       '  1. OPENAI_API_KEY environment variable\n' +
-      '  2. ~/.ap/config.json: { "openai_api_key": "sk-..." }\n' +
+      '  2. ~/.blush/config.json: { "openai_api_key": "sk-..." }\n' +
       '  3. .env file in current directory'
     );
   }

@@ -1,4 +1,4 @@
-# AP -- Team CLI Agent
+# Blush -- Team CLI Agent
 
 > ap.haus -- AI Research & Applied Intelligence
 
@@ -23,11 +23,11 @@ TypeScript monorepo. 5 packages that layer cleanly:
 ```
 ap/
 ├── packages/
-│   ├── ai/           # @ap/ai    -- Multi-provider LLM abstraction
-│   ├── core/         # @ap/core  -- Agent loop, tools, state
-│   ├── tui/          # @ap/tui   -- Terminal UI primitives
-│   ├── cli/          # @ap/cli   -- Main CLI binary + commands
-│   └── team/         # @ap/team  -- Multi-agent coordination
+│   ├── ai/           # @blush/ai    -- Multi-provider LLM abstraction
+│   ├── core/         # @blush/core  -- Agent loop, tools, state
+│   ├── tui/          # @blush/tui   -- Terminal UI primitives
+│   ├── cli/          # @blush/cli   -- Main CLI binary + commands
+│   └── team/         # @blush/team  -- Multi-agent coordination
 ├── extensions/       # Built-in extensions
 ├── skills/           # Built-in skills (/btw, /compact, etc.)
 ├── PLAN.md           # This file
@@ -40,22 +40,22 @@ ap/
 ### Dependency Graph
 
 ```
-@ap/ai          (zero internal deps -- usable standalone)
+@blush/ai          (zero internal deps -- usable standalone)
     ↓
-@ap/core        (depends on @ap/ai)
+@blush/core        (depends on @blush/ai)
     ↓
-@ap/tui         (zero internal deps -- pure terminal rendering)
+@blush/tui         (zero internal deps -- pure terminal rendering)
     ↓
-@ap/cli         (depends on @ap/core + @ap/tui)
+@blush/cli         (depends on @blush/core + @blush/tui)
     ↓
-@ap/team        (depends on @ap/core -- can run headless or through CLI)
+@blush/team        (depends on @blush/core -- can run headless or through CLI)
 ```
 
 ---
 
 ## Package Details
 
-### @ap/ai -- LLM Layer
+### @blush/ai -- LLM Layer
 
 Unified interface across providers. Streaming-first. Tool calling via TypeBox schemas.
 
@@ -79,7 +79,7 @@ Unified interface across providers. Streaming-first. Tool calling via TypeBox sc
 - Tool schemas use TypeBox for runtime validation + static typing.
 - Context handoff converts provider-specific formats (Anthropic thinking blocks become `<thinking>` tags for others).
 
-### @ap/core -- Agent Loop
+### @blush/core -- Agent Loop
 
 The brain. Runs the tool-calling loop, manages state, handles message flow.
 
@@ -121,7 +121,7 @@ User message → System prompt assembly → LLM call → Tool execution → Loop
 - Escape = abort with recovery
 - Double-Escape = rewind to checkpoint
 
-### @ap/tui -- Terminal UI
+### @blush/tui -- Terminal UI
 
 Retained-mode terminal rendering. Not React-based. Direct ANSI escape codes with differential updates.
 
@@ -140,9 +140,9 @@ Retained-mode terminal rendering. Not React-based. Direct ANSI escape codes with
 - 256-color + truecolor support
 - Responsive to terminal resize
 
-### @ap/cli -- Main Binary
+### @blush/cli -- Main Binary
 
-The `ap` command. Sessions, commands, modes.
+The `blush` command. Sessions, commands, modes.
 
 **Commands (cherry-picked from Claude Code + pi):**
 
@@ -168,11 +168,11 @@ The `ap` command. Sessions, commands, modes.
 
 **Session management:**
 - Resume last session by default
-- `ap --new` for fresh session
-- `ap --session <name>` for named sessions
-- Session list with `ap sessions`
+- `blush --new` for fresh session
+- `blush --session <name>` for named sessions
+- Session list with `blush sessions`
 
-### @ap/team -- Multi-Agent Coordination
+### @blush/team -- Multi-Agent Coordination
 
 The differentiator. Agents are peers, not subagents.
 
@@ -257,7 +257,7 @@ Checkpoint after each tool call. Double-escape lets you rewind to any checkpoint
 TypeScript modules with full system access. Loaded from:
 - `~/.ap/extensions/` (global)
 - `.ap/extensions/` (per-project)
-- npm packages (`ap install <package>`)
+- npm packages (`blush install <package>`)
 
 **Extension API:**
 ```typescript
@@ -302,11 +302,11 @@ Analyze pending changes for security vulnerabilities...
 ### Phase 1 -- Foundation
 - [x] PLAN.md
 - [x] Monorepo scaffold (turborepo, tsconfig, package.json)
-- [x] @ap/ai -- Anthropic + OpenAI providers with streaming + tool calling
-- [x] @ap/core -- Agent loop with 4 core tools
-- [x] @ap/tui -- Basic streaming output + input
-- [x] @ap/cli -- `ap` binary that runs interactive sessions
-- [x] First working REPL: `ap` launches, accepts input, calls Claude, executes tools
+- [x] @blush/ai -- Anthropic + OpenAI providers with streaming + tool calling
+- [x] @blush/core -- Agent loop with 4 core tools
+- [x] @blush/tui -- Basic streaming output + input
+- [x] @blush/cli -- `blush` binary that runs interactive sessions
+- [x] First working REPL: `blush` launches, accepts input, calls Claude, executes tools
 
 ### Phase 2 -- Commands & Sessions
 - [x] JSONL session storage with branching
@@ -320,7 +320,7 @@ Analyze pending changes for security vulnerabilities...
 - [x] CLI bundles workspace deps for standalone execution
 
 ### Phase 3 -- Team
-- [x] @ap/team package
+- [x] @blush/team package
 - [x] Git worktree isolation (createWorktree, mergeWorktree)
 - [x] Mailbox system (file-based, broadcast, structured types)
 - [x] Task queue (create, claim, complete, dependencies, auto-unblock)
@@ -332,13 +332,13 @@ Analyze pending changes for security vulnerabilities...
 ### Phase 4 -- Ecosystem
 - [x] Extension loading + API (register tools, commands, events, context)
 - [x] Skills system (markdown+frontmatter, progressive disclosure, /skills command)
-- [ ] Package registry (ap install <package>)
+- [ ] Package registry (blush install <package>)
 - [x] OpenAI + generic providers
 - [x] OpenAI-compatible endpoint support (Ollama, vLLM, custom URLs)
 - [x] Wren compression integration (CLI + HTTP modes, auto-detect, tool output compression)
 - [x] /diff command (colorized git diff)
 - [x] Built-in skills: /security-review, /commit, /simplify
-- [x] Package registry (ap install, ap list, ap remove -- npm, git, GitHub)
+- [x] Package registry (blush install, ap list, ap remove -- npm, git, GitHub)
 
 ### Phase 5 -- Polish
 - [x] Haiku sidecar (bash safety classification, conversation summarization, session titles)
@@ -359,7 +359,7 @@ Analyze pending changes for security vulnerabilities...
 
 | Decision | Choice | Why |
 |----------|--------|-----|
-| Language | TypeScript | Same as pi, good ecosystem, browser-compatible @ap/ai |
+| Language | TypeScript | Same as pi, good ecosystem, browser-compatible @blush/ai |
 | Build | Turborepo | Fast monorepo builds with caching |
 | Runtime | Node.js 20+ | Native fetch, stable ESM |
 | Schema | TypeBox | Runtime validation + static types from one source |
@@ -396,11 +396,11 @@ Analyze pending changes for security vulnerabilities...
 **Commits:**
 
 1. `e434bb1` -- Initial commit: 5-package monorepo scaffold, all source code
-   - @ap/ai: Anthropic + OpenAI providers, streaming, tool calling, token tracking, registry
-   - @ap/core: Agent loop, 4 core tools (read/write/edit/bash), JSONL sessions, context assembly
-   - @ap/tui: Streaming markdown, syntax highlighting, status bar, input handling
-   - @ap/cli: `ap` binary with /btw, /compact, /context, /branch, /model, print mode
-   - @ap/team: Worktree isolation, mailbox system, task queue, coordinator, synthesis
+   - @blush/ai: Anthropic + OpenAI providers, streaming, tool calling, token tracking, registry
+   - @blush/core: Agent loop, 4 core tools (read/write/edit/bash), JSONL sessions, context assembly
+   - @blush/tui: Streaming markdown, syntax highlighting, status bar, input handling
+   - @blush/cli: `blush` binary with /btw, /compact, /context, /branch, /model, print mode
+   - @blush/team: Worktree isolation, mailbox system, task queue, coordinator, synthesis
 
 2. `3949604` -- Config file auth, session resume, interactive /btw overlay
    - Multi-source API key resolution (~/.ap/config.json, .env, env vars)
@@ -409,7 +409,7 @@ Analyze pending changes for security vulnerabilities...
    - CLI bundles workspace deps for standalone node execution
 
 3. `6f3aa71` -- Wire /team commands into CLI
-   - /team spawn, msg, status, synthesize, merge wired to @ap/team
+   - /team spawn, msg, status, synthesize, merge wired to @blush/team
    - Team status shows agents, branches, tasks with color coding
 
 4. `(current)` -- README.md, PLAN.md progress log
@@ -447,9 +447,9 @@ Analyze pending changes for security vulnerabilities...
 - `ap -p "q" --json` -- JSON output mode
 - `ap --rpc` -- RPC mode for embedding
 - `ap` -- interactive REPL with 16 commands
-- `ap -r` / `ap --session <id>` -- session resume
+- `ap -r` / `blush --session <id>` -- session resume
 - `ap -t ocean` / `/theme ocean` -- 7 color themes
-- `ap sessions` -- list sessions for cwd
+- `blush sessions` -- list sessions for cwd
 - `./packages/cli/dist/bin.js` -- runs directly (shebang + chmod)
 - `/diff`, `/context`, `/skills`, `/theme` -- work without API key
 - All 5 packages build clean in ~3s (full turbo cache in 7ms)
@@ -457,7 +457,7 @@ Analyze pending changes for security vulnerabilities...
 - Skills loaded from ~/.ap/skills/ and .ap/skills/
 - Provider auto-detection: claude*, gpt*, o1*, o3*
 - Custom endpoint support: `ollama:model`, `local:model`, `http://url:port/v1:model`
-- SDK: `import { createApSession } from '@ap/cli/sdk'`
+- SDK: `import { createApSession } from '@blush/cli/sdk'`
 
 **What needs API key to test end-to-end:**
 - Full agent loop (send -> LLM -> tool calls -> loop)
@@ -477,7 +477,7 @@ Analyze pending changes for security vulnerabilities...
     - `ap init`: interactive first-time setup (dirs, config, AGENTS.md)
     - `!command` bash passthrough (output added to conversation context)
     - `/copy [N]`: clipboard copy with code block detection (pbcopy/xclip)
-    - Package registry: `ap install`, `ap list`, `ap remove` (npm, git, GitHub)
+    - Package registry: `blush install`, `ap list`, `ap remove` (npm, git, GitHub)
     - Prompt suggestions after responses via sidecar
     - Session resume uses proper config.session path (no mutation)
     - Updated help with all subcommands and key bindings

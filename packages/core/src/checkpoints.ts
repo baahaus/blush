@@ -58,7 +58,7 @@ export function createCheckpoint(
 
   try {
     // Create a lightweight tag for the current state
-    const tagName = `ap-checkpoint-${Date.now().toString(36)}`;
+    const tagName = `blush-checkpoint-${Date.now().toString(36)}`;
 
     // Check if there are uncommitted changes to stash
     const status = execSync('git status --porcelain', { cwd, encoding: 'utf-8' }).trim();

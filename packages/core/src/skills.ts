@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
-const GLOBAL_SKILLS_DIR = join(homedir(), '.ap', 'skills');
+const GLOBAL_SKILLS_DIR = join(homedir(), '.blush', 'skills');
 
 export interface Skill {
   name: string;
@@ -93,7 +93,7 @@ export class SkillRegistry {
   async loadAll(cwd: string): Promise<number> {
     let total = 0;
     total += await this.loadDirectory(GLOBAL_SKILLS_DIR);
-    total += await this.loadDirectory(join(cwd, '.ap', 'skills'));
+    total += await this.loadDirectory(join(cwd, '.blush', 'skills'));
     return total;
   }
 

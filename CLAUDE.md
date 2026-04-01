@@ -1,15 +1,15 @@
-# AP -- Team CLI Agent
+# Blush -- Team CLI Agent
 
 Read PLAN.md first. It is the source of truth for architecture, decisions, and implementation status.
 
 ## Project Structure
 
 TypeScript monorepo with 5 packages:
-- `@ap/ai` -- Multi-provider LLM abstraction (zero internal deps)
-- `@ap/core` -- Agent loop, 4 core tools, state management
-- `@ap/tui` -- Terminal UI primitives
-- `@ap/cli` -- Main `ap` binary, commands, sessions
-- `@ap/team` -- Multi-agent coordination (the differentiator)
+- `@blush/ai` -- Multi-provider LLM abstraction (zero internal deps)
+- `@blush/core` -- Agent loop, 4 core tools, state management
+- `@blush/tui` -- Terminal UI primitives
+- `@blush/cli` -- Main `blush` binary, commands, sessions
+- `@blush/team` -- Multi-agent coordination (the differentiator)
 
 ## Build & Dev
 

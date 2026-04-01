@@ -23,7 +23,7 @@ export { editTool, edit } from './tools/edit.js';
 export { bashTool, bash } from './tools/bash.js';
 export {
   ExtensionManager,
-  type ApContext,
+  type BlushContext,
   type ExtensionTool,
   type ExtensionModule,
   type CommandHandler,

@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import type { Provider } from '@ap/ai';
+import type { Provider } from '@blush/ai';
 import {
   createTeamSession,
   spawnPeer,
@@ -9,8 +9,8 @@ import {
   getTeamStatus,
   listTasks,
   type TeamSession,
-} from '@ap/team';
-import { renderLine, renderError } from '@ap/tui';
+} from '@blush/team';
+import { renderLine, renderError } from '@blush/tui';
 
 let activeTeam: TeamSession | null = null;
 

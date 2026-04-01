@@ -3,9 +3,9 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { pathToFileURL } from 'node:url';
-import type { ToolDefinition } from '@ap/ai';
+import type { ToolDefinition } from '@blush/ai';
 
-const GLOBAL_EXT_DIR = join(homedir(), '.ap', 'extensions');
+const GLOBAL_EXT_DIR = join(homedir(), '.blush', 'extensions');
 
 export type CommandHandler = (args: string) => Promise<void>;
 export type EventHandler = (data: unknown) => Promise<void>;
@@ -17,7 +17,7 @@ export interface ExtensionTool {
   execute: (params: Record<string, unknown>) => Promise<string>;
 }
 
-export interface ApContext {
+export interface BlushContext {
   tools: {
     register: (tool: ExtensionTool) => void;
     list: () => ExtensionTool[];
@@ -37,7 +37,7 @@ export interface ApContext {
 }
 
 export interface ExtensionModule {
-  default: (ap: ApContext) => void | Promise<void>;
+  default: (ap: BlushContext) => void | Promise<void>;
 }
 
 export class ExtensionManager {
@@ -46,7 +46,7 @@ export class ExtensionManager {
   private eventHandlers = new Map<string, EventHandler[]>();
   private appendedContext: string[] = [];
 
-  createContext(): ApContext {
+  createContext(): BlushContext {
     return {
       tools: {
         register: (tool) => {
@@ -115,7 +115,7 @@ export class ExtensionManager {
     total += await this.loadDirectory(GLOBAL_EXT_DIR);
 
     // Project extensions
-    total += await this.loadDirectory(join(cwd, '.ap', 'extensions'));
+    total += await this.loadDirectory(join(cwd, '.blush', 'extensions'));
 
     return total;
   }

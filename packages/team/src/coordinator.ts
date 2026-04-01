@@ -1,5 +1,5 @@
-import type { Provider } from '@ap/ai';
-import { createAgent, type Agent } from '@ap/core';
+import type { Provider } from '@blush/ai';
+import { createAgent, type Agent } from '@blush/core';
 import { createWorktree, mergeWorktree, type Worktree } from './worktree.js';
 import { sendMessage, readMessages, markRead } from './mailbox.js';
 import {
@@ -27,7 +27,7 @@ export interface TeamSession {
 }
 
 function generateSessionId(): string {
-  return 'team-' + Date.now().toString(36);
+  return 'blush-team-' + Date.now().toString(36);
 }
 
 export function createTeamSession(

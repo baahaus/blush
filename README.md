@@ -1,4 +1,4 @@
-# AP
+# Blush
 
 Team CLI agent from [ap.haus](https://ap.haus). Terminal coding agent where multi-agent coordination is core architecture, not an extension.
 
@@ -7,7 +7,7 @@ Team CLI agent from [ap.haus](https://ap.haus). Terminal coding agent where mult
 ## Install
 
 ```bash
-git clone https://github.com/baahaus/ap.git
+git clone https://github.com/baahaus/blush.git
 cd ap
 pnpm install
 pnpm build
@@ -31,7 +31,7 @@ ap
 Run interactive setup:
 
 ```bash
-ap init
+blush init
 ```
 
 Or set your API key manually:
@@ -50,26 +50,26 @@ ANTHROPIC_API_KEY=sk-ant-...
 ## Usage
 
 ```bash
-ap                                    # Interactive mode
-ap -p "question"                      # Print mode (single response)
-ap -p "question" --json               # JSON output
-ap --rpc                              # RPC mode (JSONL stdin/stdout)
-ap -m claude-opus-4-20250514          # Specific model
-ap -m ollama:llama3.1                 # Ollama
-ap -m http://localhost:8000/v1:qwen   # Custom endpoint
-ap -r                                 # Resume last session
-ap -t ocean                           # Color theme
+blush                                   # Interactive mode
+blush -p "question"                      # Print mode (single response)
+blush -p "question" --json               # JSON output
+blush --rpc                              # RPC mode (JSONL stdin/stdout)
+blush -m claude-opus-4-20250514          # Specific model
+blush -m ollama:llama3.1                 # Ollama
+blush -m http://localhost:8000/v1:qwen   # Custom endpoint
+blush -r                                 # Resume last session
+blush -t ocean                           # Color theme
 ```
 
 ### Subcommands
 
 ```bash
-ap init                               # First-time setup
-ap sessions                           # List sessions
-ap install user/repo                  # Install package from GitHub
-ap install npm:package-name           # Install from npm
-ap list                               # List installed packages
-ap remove <name>                      # Remove package
+blush init                               # First-time setup
+blush sessions                           # List sessions
+blush install user/repo                  # Install package from GitHub
+blush install npm:package-name           # Install from npm
+blush list                               # List installed packages
+blush remove <name>                      # Remove package
 ```
 
 ### Model Formats
@@ -120,15 +120,15 @@ Output is added to the conversation context so the agent can see it.
 5-package TypeScript monorepo:
 
 ```
-@ap/ai     Multi-provider LLM + sidecar + compression
+@blush/ai     Multi-provider LLM + sidecar + compression
   |
-@ap/core   Agent loop + 4 tools + extensions + skills + checkpoints
+@blush/core   Agent loop + 4 tools + extensions + skills + checkpoints
   |
-@ap/tui    Terminal UI + overlays + themes
+@blush/tui    Terminal UI + overlays + themes
   |
-@ap/cli    Binary + REPL + commands + RPC + SDK
+@blush/cli    Binary + REPL + commands + RPC + SDK
   |
-@ap/team   Peer agents + worktrees + mailbox + task queue
+@blush/team   Peer agents + worktrees + mailbox + task queue
 ```
 
 ### 4 Core Tools
@@ -169,7 +169,7 @@ Optional [Wren](https://github.com/Divagation/wren) integration compresses tool 
 7 built-in color themes: `default`, `mono`, `ocean`, `forest`, `sunset`, `rose`, `hacker`
 
 ```bash
-ap -t hacker        # Set on start
+blush -t hacker        # Set on start
 /theme ocean        # Switch mid-session
 ```
 
@@ -181,12 +181,12 @@ ap -t hacker        # Set on start
 | Print | `-p "question"` | Single response, exit |
 | JSON | `-p "q" --json` | Structured output for scripts |
 | RPC | `--rpc` | JSONL stdin/stdout for editors/bots |
-| SDK | `import from '@ap/cli/sdk'` | Programmatic embedding |
+| SDK | `import from '@blush/cli/sdk'` | Programmatic embedding |
 
 ### SDK Usage
 
 ```typescript
-import { createApSession } from '@ap/cli/sdk';
+import { createApSession } from '@blush/cli/sdk';
 
 const session = await createApSession({
   model: 'claude-sonnet-4-20250514',
@@ -246,11 +246,11 @@ Install to `~/.ap/extensions/` (global) or `.ap/extensions/` (project).
 Install community extensions and skills:
 
 ```bash
-ap install user/repo              # From GitHub
-ap install npm:ap-extension-foo   # From npm
-ap install git:https://...        # From any git URL
-ap list                           # Show installed
-ap remove <name>                  # Uninstall
+blush install user/repo              # From GitHub
+blush install npm:ap-extension-foo   # From npm
+blush install git:https://...        # From any git URL
+blush list                           # Show installed
+blush remove <name>                  # Uninstall
 ```
 
 ## What We Stole

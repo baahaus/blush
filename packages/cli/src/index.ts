@@ -1,6 +1,6 @@
 import chalk from 'chalk';
-import { resolveProvider, type StreamEvent } from '@ap/ai';
-import { createAgent, saveSession, loadSession, listSessions, branchAt, SkillRegistry } from '@ap/core';
+import { resolveProvider, type StreamEvent } from '@blush/ai';
+import { createAgent, saveSession, loadSession, listSessions, branchAt, SkillRegistry } from '@blush/core';
 import {
   createInput,
   isCommand,
@@ -15,7 +15,7 @@ import {
   setTheme,
   getTheme,
   listThemes,
-} from '@ap/tui';
+} from '@blush/tui';
 import { btw, compact, copy, showContext, showDiff, showSuggestions, handleTeamCommand, showSkills } from './commands/index.js';
 
 const VERSION = '0.1.0';
@@ -34,7 +34,7 @@ interface CliOptions {
 
 function parseArgs(args: string[]): CliOptions {
   const opts: CliOptions = {
-    model: process.env.AP_MODEL || 'claude-sonnet-4-20250514',
+    model: process.env.BLUSH_MODEL || 'claude-sonnet-4-20250514',
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -58,7 +58,7 @@ function parseArgs(args: string[]): CliOptions {
     } else if (arg === '--json') {
       opts.json = true;
     } else if (arg === '--version' || arg === '-v') {
-      console.log(`ap ${VERSION}`);
+      console.log(`blush ${VERSION}`);
       process.exit(0);
     } else if (arg === '--help' || arg === '-h') {
       printHelp();
@@ -103,26 +103,26 @@ async function listSessionsCommand(): Promise<void> {
 
 function printHelp(): void {
   console.log(`
-${chalk.bold('ap')} -- Team CLI Agent from ap.haus
+${chalk.bold('blush')} -- Team CLI Agent from ap.haus
 
 ${chalk.bold('Usage:')}
-  ap                        Interactive mode (new session)
-  ap -p "question"          Print mode (single response)
-  ap -p "q" --json          Print mode with JSON output
-  ap --rpc                  RPC mode (JSONL over stdin/stdout)
-  ap -r, --resume           Resume last session
-  ap -s, --session <id>     Resume specific session
-  ap -n, --new              Force new session
-  ap -m <model>             Set model (anthropic/openai/ollama/url)
-  ap -t, --theme <name>     Set color theme
-  ap --color <hex>          Set prompt color
+  blush                      Interactive mode (new session)
+  blush -p "question"          Print mode (single response)
+  blush -p "q" --json          Print mode with JSON output
+  blush --rpc                  RPC mode (JSONL over stdin/stdout)
+  blush -r, --resume           Resume last session
+  blush -s, --session <id>     Resume specific session
+  blush -n, --new              Force new session
+  blush -m <model>             Set model (anthropic/openai/ollama/url)
+  blush -t, --theme <name>     Set color theme
+  blush --color <hex>          Set prompt color
 
 ${chalk.bold('Subcommands:')}
-  ap init                   First-time setup (create ~/.ap, config)
-  ap sessions               List sessions for current directory
-  ap install <source>       Install package (npm:pkg, user/repo, git:url)
-  ap list                   List installed packages
-  ap remove <name>          Remove a package
+  blush init                   First-time setup (create ~/.blush, config)
+  blush sessions               List sessions for current directory
+  blush install <source>       Install package (npm:pkg, user/repo, git:url)
+  blush list                   List installed packages
+  blush remove <name>          Remove a package
 
 ${chalk.bold('Commands:')}
   /btw <question>           Ephemeral question (no history)
@@ -411,7 +411,7 @@ export async function run(): Promise<void> {
               renderLine(chalk.dim(output.trimEnd()));
             }
             // Add to conversation so the agent can see it
-            const { addEntry } = await import('@ap/core');
+            const { addEntry } = await import('@blush/core');
             addEntry(agent.session, {
               role: 'user',
               content: `[Shell command: ${cmd}]\n${output}`,

@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
-const TEAM_DIR = join(homedir(), '.ap', 'team');
+const TEAM_DIR = join(homedir(), '.blush', 'team');
 
 export type TaskStatus = 'pending' | 'claimed' | 'in_progress' | 'done' | 'blocked';
 

@@ -1,10 +1,10 @@
 {
-  "name": "@ap/cli",
+  "name": "@blush/cli",
   "version": "0.1.0",
-  "description": "AP CLI binary -- team coding agent",
+  "description": "Blush CLI -- team coding agent from ap.haus",
   "type": "module",
   "bin": {
-    "ap": "dist/bin.js"
+    "blush": "dist/bin.js"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -25,10 +25,10 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@ap/ai": "workspace:*",
-    "@ap/core": "workspace:*",
-    "@ap/team": "workspace:*",
-    "@ap/tui": "workspace:*",
+    "@blush/ai": "workspace:*",
+    "@blush/core": "workspace:*",
+    "@blush/team": "workspace:*",
+    "@blush/tui": "workspace:*",
     "@sinclair/typebox": "^0.34.0",
     "chalk": "^5.3.0"
   },

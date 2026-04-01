@@ -1,8 +1,8 @@
 {
-  "name": "ap",
+  "name": "blush",
   "version": "0.1.0",
   "private": true,
-  "description": "AP -- Team CLI Agent from ap.haus",
+  "description": "Blush -- Team CLI Agent from ap.haus (a blush of robins)",
   "author": "AP.HAUS",
   "license": "MIT",
   "type": "module",

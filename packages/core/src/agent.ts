@@ -6,8 +6,8 @@ import type {
   ContentBlock,
   StreamEvent,
   ToolUseContent,
-} from '@ap/ai';
-import { UsageTracker, compressToolOutput } from '@ap/ai';
+} from '@blush/ai';
+import { UsageTracker, compressToolOutput } from '@blush/ai';
 import { coreTools, findTool, getToolDefinitions, type CoreTool } from './tools/index.js';
 import { assembleContext } from './context.js';
 import { ExtensionManager } from './extensions.js';

@@ -1,6 +1,6 @@
 import { Type, type Static } from '@sinclair/typebox';
 import { spawn } from 'node:child_process';
-import { classifyBashCommand } from '@ap/ai';
+import { classifyBashCommand } from '@blush/ai';
 
 export const BashParams = Type.Object({
   command: Type.String({ description: 'The shell command to execute' }),

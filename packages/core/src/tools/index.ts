@@ -2,7 +2,7 @@ import { readTool } from './read.js';
 import { writeTool } from './write.js';
 import { editTool } from './edit.js';
 import { bashTool } from './bash.js';
-import type { ToolDefinition } from '@ap/ai';
+import type { ToolDefinition } from '@blush/ai';
 
 export { readTool, writeTool, editTool, bashTool };
 export { read, type ReadParams } from './read.js';

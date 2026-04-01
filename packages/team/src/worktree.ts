@@ -21,8 +21,8 @@ export function createWorktree(repoPath: string, agentName: string): Worktree {
     throw new Error(`Not a git repository: ${repoPath}`);
   }
 
-  const branch = `ap-agent/${agentName}-${Date.now().toString(36)}`;
-  const worktreeDir = mkdtempSync(join(tmpdir(), `ap-${agentName}-`));
+  const branch = `blush-agent/${agentName}-${Date.now().toString(36)}`;
+  const worktreeDir = mkdtempSync(join(tmpdir(), `blush-${agentName}-`));
 
   try {
     // Create worktree with new branch from HEAD
@@ -48,7 +48,7 @@ export function createWorktree(repoPath: string, agentName: string): Worktree {
 
         if (status) {
           // Auto-commit changes before cleanup
-          execSync('git add -A && git commit -m "ap-agent: auto-save on cleanup"', {
+          execSync('git add -A && git commit -m "blush-agent: auto-save on cleanup"', {
             cwd: worktreeDir,
             stdio: 'pipe',
           });

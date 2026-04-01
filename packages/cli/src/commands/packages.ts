@@ -4,11 +4,11 @@ import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { renderLine, renderError } from '@ap/tui';
+import { renderLine, renderError } from '@blush/tui';
 
-const AP_DIR = join(homedir(), '.ap');
-const PACKAGES_DIR = join(AP_DIR, 'packages');
-const MANIFEST_PATH = join(AP_DIR, 'packages.json');
+const BLUSH_DIR = join(homedir(), '.blush');
+const PACKAGES_DIR = join(BLUSH_DIR, 'packages');
+const MANIFEST_PATH = join(BLUSH_DIR, 'packages.json');
 
 interface PackageManifest {
   installed: Record<string, {
@@ -118,14 +118,14 @@ export async function installPackage(source: string): Promise<void> {
   const skillDir = join(installPath, 'skills');
 
   if (existsSync(extDir)) {
-    const target = join(AP_DIR, 'extensions');
+    const target = join(BLUSH_DIR, 'extensions');
     await mkdir(target, { recursive: true });
     execSync(`cp -r "${extDir}"/* "${target}/" 2>/dev/null || true`, { stdio: 'pipe' });
     renderLine(chalk.green(`  Extensions installed`));
   }
 
   if (existsSync(skillDir)) {
-    const target = join(AP_DIR, 'skills');
+    const target = join(BLUSH_DIR, 'skills');
     await mkdir(target, { recursive: true });
     execSync(`cp -r "${skillDir}"/* "${target}/" 2>/dev/null || true`, { stdio: 'pipe' });
     renderLine(chalk.green(`  Skills installed`));

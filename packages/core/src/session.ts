@@ -3,9 +3,9 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
-import type { Message } from '@ap/ai';
+import type { Message } from '@blush/ai';
 
-const SESSIONS_DIR = join(homedir(), '.ap', 'sessions');
+const SESSIONS_DIR = join(homedir(), '.blush', 'sessions');
 
 export interface SessionEntry {
   id: string;

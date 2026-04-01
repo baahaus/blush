@@ -13,7 +13,7 @@ export default defineConfig([
     dts: true,
     clean: true,
     sourcemap: true,
-    noExternal: ['@ap/ai', '@ap/core', '@ap/tui', '@ap/team', '@sinclair/typebox'],
+    noExternal: ['@blush/ai', '@blush/core', '@blush/tui', '@blush/team', '@sinclair/typebox'],
   },
   // Binary entry (with shebang + executable)
   {
@@ -21,7 +21,7 @@ export default defineConfig([
     format: ['esm'],
     dts: false,
     sourcemap: true,
-    noExternal: ['@ap/ai', '@ap/core', '@ap/tui', '@ap/team', '@sinclair/typebox'],
+    noExternal: ['@blush/ai', '@blush/core', '@blush/tui', '@blush/team', '@sinclair/typebox'],
     banner: { js: '#!/usr/bin/env node' },
     async onSuccess() {
       await chmod(join('dist', 'bin.js'), 0o755);

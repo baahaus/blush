@@ -36,16 +36,16 @@ importers:
 
   packages/cli:
     dependencies:
-      '@ap/ai':
+      '@blush/ai':
         specifier: workspace:*
         version: link:../ai
-      '@ap/core':
+      '@blush/core':
         specifier: workspace:*
         version: link:../core
-      '@ap/team':
+      '@blush/team':
         specifier: workspace:*
         version: link:../team
-      '@ap/tui':
+      '@blush/tui':
         specifier: workspace:*
         version: link:../tui
       '@sinclair/typebox':
@@ -67,7 +67,7 @@ importers:
 
   packages/core:
     dependencies:
-      '@ap/ai':
+      '@blush/ai':
         specifier: workspace:*
         version: link:../ai
       '@sinclair/typebox':
@@ -86,10 +86,10 @@ importers:
 
   packages/team:
     dependencies:
-      '@ap/ai':
+      '@blush/ai':
         specifier: workspace:*
         version: link:../ai
-      '@ap/core':
+      '@blush/core':
         specifier: workspace:*
         version: link:../core
       '@sinclair/typebox':

@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import type { Message } from '@ap/ai';
+import type { Message } from '@blush/ai';
 
 /**
  * /context -- Visualize context window usage.

@@ -1,5 +1,5 @@
-import type { Provider, Message } from '@ap/ai';
-import { addEntry, type Session } from '@ap/core';
+import type { Provider, Message } from '@blush/ai';
+import { addEntry, type Session } from '@blush/core';
 
 /**
  * /compact [focus] -- Compress conversation with optional focus instructions.
@@ -13,7 +13,7 @@ export async function compact(
   model: string,
   focus?: string,
 ): Promise<void> {
-  const { getActiveMessages } = await import('@ap/core');
+  const { getActiveMessages } = await import('@blush/core');
   const messages = getActiveMessages(session);
 
   if (messages.length < 4) {

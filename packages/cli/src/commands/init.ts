@@ -4,9 +4,9 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
-import { renderLine } from '@ap/tui';
+import { renderLine } from '@blush/tui';
 
-const AP_DIR = join(homedir(), '.ap');
+const BLUSH_DIR = join(homedir(), '.blush');
 
 function ask(rl: ReturnType<typeof createInterface>, question: string): Promise<string> {
   return new Promise((resolve) => rl.question(question, resolve));
@@ -16,10 +16,10 @@ export async function init(): Promise<void> {
   renderLine(chalk.bold('\nAP Setup\n'));
 
   const dirs = [
-    AP_DIR,
-    join(AP_DIR, 'extensions'),
-    join(AP_DIR, 'skills'),
-    join(AP_DIR, 'sessions'),
+    BLUSH_DIR,
+    join(BLUSH_DIR, 'extensions'),
+    join(BLUSH_DIR, 'skills'),
+    join(BLUSH_DIR, 'sessions'),
   ];
 
   // Create directories
@@ -33,7 +33,7 @@ export async function init(): Promise<void> {
   }
 
   // Config file
-  const configPath = join(AP_DIR, 'config.json');
+  const configPath = join(BLUSH_DIR, 'config.json');
   if (!existsSync(configPath)) {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
 
@@ -64,7 +64,7 @@ export async function init(): Promise<void> {
   }
 
   // Global AGENTS.md
-  const agentsPath = join(AP_DIR, 'AGENTS.md');
+  const agentsPath = join(BLUSH_DIR, 'AGENTS.md');
   if (!existsSync(agentsPath)) {
     await writeFile(agentsPath, `# Global AP Instructions
 
@@ -77,6 +77,6 @@ export async function init(): Promise<void> {
   renderLine(chalk.bold.green('\n  AP is ready.\n'));
   renderLine(chalk.dim('  Run `ap` to start a session.'));
   renderLine(chalk.dim('  Run `ap --help` for all options.'));
-  renderLine(chalk.dim('  Add skills to ~/.ap/skills/'));
-  renderLine(chalk.dim('  Add extensions to ~/.ap/extensions/\n'));
+  renderLine(chalk.dim('  Add skills to ~/.blush/skills/'));
+  renderLine(chalk.dim('  Add extensions to ~/.blush/extensions/\n'));
 }

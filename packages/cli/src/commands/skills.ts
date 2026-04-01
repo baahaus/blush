@@ -1,12 +1,12 @@
 import chalk from 'chalk';
-import { SkillRegistry } from '@ap/core';
-import { renderLine } from '@ap/tui';
+import { SkillRegistry } from '@blush/core';
+import { renderLine } from '@blush/tui';
 
 export function showSkills(registry: SkillRegistry): void {
   const skills = registry.list();
 
   if (skills.length === 0) {
-    renderLine(chalk.dim('No skills installed. Add .md files to ~/.ap/skills/ or .ap/skills/'));
+    renderLine(chalk.dim('No skills installed. Add .md files to ~/.blush/skills/ or .blush/skills/'));
     return;
   }
 

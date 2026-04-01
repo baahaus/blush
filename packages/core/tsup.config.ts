@@ -6,5 +6,5 @@ export default defineConfig({
   dts: true,
   clean: true,
   sourcemap: true,
-  external: ['@ap/ai', '@sinclair/typebox'],
+  external: ['@blush/ai', '@sinclair/typebox'],
 });

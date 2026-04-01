@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 
-const AP_DIR = join(homedir(), '.ap');
+const BLUSH_DIR = join(homedir(), '.blush');
 const CONTEXT_FILES = ['AGENTS.md', 'CLAUDE.md'];
 
 interface ContextSource {
@@ -17,7 +17,7 @@ interface ContextSource {
  * Priority order:
  * 1. SYSTEM.md (full override if exists)
  * 2. Base system prompt
- * 3. Global context (~/.ap/AGENTS.md, ~/.ap/CLAUDE.md)
+ * 3. Global context (~/.blush/AGENTS.md, ~/.blush/CLAUDE.md)
  * 4. Directory-walk context (cwd up to root)
  * 5. APPEND_SYSTEM.md additions
  */
@@ -32,7 +32,7 @@ export async function assembleContext(cwd: string): Promise<string> {
 
   // Global context files
   for (const file of CONTEXT_FILES) {
-    const globalPath = join(AP_DIR, file);
+    const globalPath = join(BLUSH_DIR, file);
     if (existsSync(globalPath)) {
       parts.push(await readFile(globalPath, 'utf-8'));
     }
@@ -76,7 +76,7 @@ async function walkContextFiles(cwd: string): Promise<ContextSource[]> {
   return sources.reverse(); // Root first, most specific last
 }
 
-const BASE_SYSTEM_PROMPT = `You are AP, a terminal coding agent from ap.haus.
+const BASE_SYSTEM_PROMPT = `You are Blush, a terminal coding agent from ap.haus.
 
 You have 4 tools: read, write, edit, bash. Use them to help the user with software engineering tasks.
 

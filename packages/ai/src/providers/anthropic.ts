@@ -48,7 +48,7 @@ export function createAnthropicProvider(config: ProviderConfig): Provider {
     throw new Error(
       'Anthropic API key required. Set it via:\n' +
       '  1. ANTHROPIC_API_KEY environment variable\n' +
-      '  2. ~/.ap/config.json: { "anthropic_api_key": "sk-..." }\n' +
+      '  2. ~/.blush/config.json: { "anthropic_api_key": "sk-..." }\n' +
       '  3. .env file in current directory'
     );
   }

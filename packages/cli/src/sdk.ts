@@ -2,9 +2,9 @@
  * SDK Mode -- Programmatic API for embedding AP in other tools.
  *
  * Usage:
- *   import { createApSession } from '@ap/cli/sdk';
+ *   import { createBlushSession } from '@blush/cli/sdk';
  *
- *   const session = await createApSession({
+ *   const session = await createBlushSession({
  *     model: 'claude-sonnet-4-20250514',
  *     cwd: '/path/to/project',
  *   });
@@ -15,8 +15,8 @@
  *   session.close();
  */
 
-import { resolveProvider, type StreamEvent, type TokenUsage } from '@ap/ai';
-import { createAgent, saveSession, type Agent } from '@ap/core';
+import { resolveProvider, type StreamEvent, type TokenUsage } from '@blush/ai';
+import { createAgent, saveSession, type Agent } from '@blush/core';
 
 export interface SdkConfig {
   model?: string;
@@ -31,7 +31,7 @@ export interface SdkResponse {
   usage: TokenUsage & { calls: number };
 }
 
-export interface ApSession {
+export interface BlushSession {
   send: (content: string) => Promise<SdkResponse>;
   getMessages: () => Array<{ role: string; content: unknown }>;
   getUsage: () => TokenUsage & { calls: number };
@@ -39,8 +39,8 @@ export interface ApSession {
   sessionId: string;
 }
 
-export async function createApSession(config: SdkConfig = {}): Promise<ApSession> {
-  const model = config.model || process.env.AP_MODEL || 'claude-sonnet-4-20250514';
+export async function createBlushSession(config: SdkConfig = {}): Promise<BlushSession> {
+  const model = config.model || process.env.BLUSH_MODEL || 'claude-sonnet-4-20250514';
   const cwd = config.cwd || process.cwd();
   const { provider, model: resolvedModel } = resolveProvider(model);
 

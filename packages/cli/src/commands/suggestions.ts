@@ -1,6 +1,6 @@
 import chalk from 'chalk';
-import type { Message } from '@ap/ai';
-import { renderLine } from '@ap/tui';
+import type { Message } from '@blush/ai';
+import { renderLine } from '@blush/tui';
 
 /**
  * Generate and display prompt suggestions after an agent response.
