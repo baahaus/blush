@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { resolveProvider, type StreamEvent } from '@ap/ai';
-import { createAgent, saveSession, loadSession, listSessions, branchAt } from '@ap/core';
+import { createAgent, saveSession, loadSession, listSessions, branchAt, SkillRegistry } from '@ap/core';
 import {
   createInput,
   isCommand,
@@ -13,7 +13,7 @@ import {
   renderError,
   renderPrompt,
 } from '@ap/tui';
-import { btw, compact, showContext, handleTeamCommand } from './commands/index.js';
+import { btw, compact, showContext, handleTeamCommand, showSkills } from './commands/index.js';
 
 const VERSION = '0.1.0';
 
@@ -113,6 +113,13 @@ export async function run(): Promise<void> {
   let currentModel = resolvedModel;
 
   const cwd = process.cwd();
+
+  // Load skills
+  const skills = new SkillRegistry();
+  const skillCount = await skills.loadAll(cwd);
+  if (skillCount > 0) {
+    console.log(chalk.dim(`Loaded ${skillCount} skill(s)`));
+  }
 
   const agent = await createAgent({
     provider,
@@ -238,6 +245,10 @@ export async function run(): Promise<void> {
         await handleTeamCommand(args, cwd, provider, currentModel);
         return true;
 
+      case 'skills':
+        showSkills(skills);
+        return true;
+
       case 'help':
         printHelp();
         return true;
@@ -249,9 +260,39 @@ export async function run(): Promise<void> {
         input.close();
         process.exit(0);
 
-      default:
+      default: {
+        // Check extension commands
+        const extCmd = agent.extensions.getCommand(name);
+        if (extCmd) {
+          await extCmd(args);
+          return true;
+        }
+
+        // Check skill triggers
+        const skill = skills.findByTrigger(`/${name}`);
+        if (skill) {
+          const content = skills.activate(skill.name);
+          if (content) {
+            renderLine(chalk.dim(`Activated skill: ${skill.name}`));
+            // Send skill content + any args as a message to the agent
+            const prompt = args
+              ? `${content}\n\nUser request: ${args}`
+              : content;
+            await agent.send(prompt);
+            renderText('\n');
+          } else {
+            renderLine(chalk.dim(`Skill ${skill.name} already active.`));
+            if (args) {
+              await agent.send(args);
+              renderText('\n');
+            }
+          }
+          return true;
+        }
+
         renderError(`Unknown command: /${name}`);
         return true;
+      }
     }
   };
 

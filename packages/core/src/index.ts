@@ -21,3 +21,15 @@ export { readTool, read } from './tools/read.js';
 export { writeTool, write } from './tools/write.js';
 export { editTool, edit } from './tools/edit.js';
 export { bashTool, bash } from './tools/bash.js';
+export {
+  ExtensionManager,
+  type ApContext,
+  type ExtensionTool,
+  type ExtensionModule,
+  type CommandHandler,
+  type EventHandler,
+} from './extensions.js';
+export {
+  SkillRegistry,
+  type Skill,
+} from './skills.js';

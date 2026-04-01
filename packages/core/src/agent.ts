@@ -10,6 +10,7 @@ import type {
 import { UsageTracker } from '@ap/ai';
 import { coreTools, findTool, getToolDefinitions, type CoreTool } from './tools/index.js';
 import { assembleContext } from './context.js';
+import { ExtensionManager } from './extensions.js';
 import {
   createSession,
   addEntry,
@@ -23,6 +24,7 @@ export interface AgentConfig {
   model: string;
   cwd: string;
   tools?: CoreTool[];
+  extensions?: ExtensionManager;
   onStream?: (event: StreamEvent) => void;
   onToolStart?: (name: string, input: Record<string, unknown>) => void;
   onToolEnd?: (name: string, result: string) => void;
@@ -31,6 +33,7 @@ export interface AgentConfig {
 export interface Agent {
   session: Session;
   usage: UsageTracker;
+  extensions: ExtensionManager;
   send(content: string): Promise<Message>;
   getMessages(): Message[];
 }
@@ -38,10 +41,32 @@ export interface Agent {
 export async function createAgent(config: AgentConfig): Promise<Agent> {
   const { provider, model, cwd, onStream, onToolStart, onToolEnd } = config;
   const tools = config.tools || coreTools;
-  const toolDefs = getToolDefinitions(tools);
   const usage = new UsageTracker();
   const session = await createSession(cwd);
-  const systemPrompt = await assembleContext(cwd);
+
+  // Load extensions
+  const extensions = config.extensions || new ExtensionManager();
+  if (!config.extensions) {
+    const loaded = await extensions.loadAll(cwd);
+    if (loaded > 0) {
+      process.stderr.write(`Loaded ${loaded} extension(s)\n`);
+    }
+  }
+
+  // Merge core tools with extension tools
+  const extTools = extensions.getTools();
+  const allTools: CoreTool[] = [
+    ...tools,
+    ...extTools.map((t) => t as unknown as CoreTool),
+  ];
+  const toolDefs = getToolDefinitions(allTools);
+
+  // Build system prompt with extension context
+  let systemPrompt = await assembleContext(cwd);
+  const appendedCtx = extensions.getAppendedContext();
+  if (appendedCtx.length > 0) {
+    systemPrompt += '\n\n' + appendedCtx.join('\n\n');
+  }
 
   async function runToolCalls(content: ContentBlock[]): Promise<Message> {
     const toolUses = content.filter((b): b is ToolUseContent => b.type === 'tool_use');
@@ -50,7 +75,10 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
     for (const toolUse of toolUses) {
       onToolStart?.(toolUse.name, toolUse.input);
 
-      const tool = findTool(toolUse.name, tools);
+      // Fire pre-tool event
+      await extensions.emit('tool:before', { name: toolUse.name, input: toolUse.input });
+
+      const tool = findTool(toolUse.name, allTools);
       let result: string;
 
       if (!tool) {
@@ -64,6 +92,9 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
       }
 
       onToolEnd?.(toolUse.name, result);
+
+      // Fire post-tool event
+      await extensions.emit('tool:after', { name: toolUse.name, result });
 
       results.push({
         type: 'tool_result',
@@ -176,6 +207,7 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
   return {
     session,
     usage,
+    extensions,
     send,
     getMessages: () => getActiveMessages(session),
   };
