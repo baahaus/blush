@@ -157,9 +157,7 @@ export async function run(): Promise<void> {
     return;
   }
 
-  const { provider, model: resolvedModel } = resolveProvider(opts.model);
-  let currentModel = resolvedModel;
-
+  let currentModel = opts.model;
   const cwd = process.cwd();
 
   // Apply theme
@@ -177,7 +175,7 @@ export async function run(): Promise<void> {
   }
 
   // Handle session resume -- load before creating agent
-  let existingSession = undefined;
+  let existingSession: Awaited<ReturnType<typeof loadSession>> | undefined = undefined;
   if (opts.resume || opts.sessionId) {
     const sessions = await listSessions(cwd);
     const targetId = opts.sessionId || sessions[sessions.length - 1];
@@ -192,134 +190,92 @@ export async function run(): Promise<void> {
     }
   }
 
-  const agent = await createAgent({
-    provider,
-    model: currentModel,
-    cwd,
-    session: existingSession,
-    onStream: (event: StreamEvent) => {
-      switch (event.type) {
-        case 'text':
-          renderText(event.text || '');
-          break;
-        case 'thinking':
-          renderText(chalk.dim(event.text || ''));
-          break;
-        case 'error':
-          renderError(event.error || 'Unknown error');
-          break;
-      }
-    },
-    onToolStart: (name) => {
-      renderText('\n');
-      renderToolStart(name);
-    },
-    onToolEnd: (name, result) => {
-      renderToolEnd(name, result);
-    },
-  });
+  // Lazy agent creation -- defer provider resolution until first use
+  let agent: Awaited<ReturnType<typeof createAgent>> | null = null;
 
-  // Print mode: single question, single response, exit
+  async function getAgent() {
+    if (agent) return agent;
+
+    const { provider, model: resolvedModel } = resolveProvider(currentModel);
+    currentModel = resolvedModel;
+
+    agent = await createAgent({
+      provider,
+      model: currentModel,
+      cwd,
+      session: existingSession || undefined,
+      onStream: (event: StreamEvent) => {
+        switch (event.type) {
+          case 'text':
+            renderText(event.text || '');
+            break;
+          case 'thinking':
+            renderText(chalk.dim(event.text || ''));
+            break;
+          case 'error':
+            renderError(event.error || 'Unknown error');
+            break;
+        }
+      },
+      onToolStart: (name) => {
+        renderText('\n');
+        renderToolStart(name);
+      },
+      onToolEnd: (name, result) => {
+        renderToolEnd(name, result);
+      },
+    });
+
+    return agent;
+  }
+
+  // Print mode: needs agent immediately
   if (opts.print) {
-    const response = await agent.send(opts.print);
-    if (opts.json) {
-      // JSON output mode
-      const text = typeof response.content === 'string'
-        ? response.content
-        : response.content
-            .filter((b) => b.type === 'text')
-            .map((b) => (b.type === 'text' ? b.text : ''))
-            .join('');
-      console.log(JSON.stringify({
-        content: text,
-        usage: agent.usage.total,
-        session: agent.session.id,
-      }));
-    } else {
-      renderText('\n');
+    try {
+      const a = await getAgent();
+      const response = await a.send(opts.print);
+      if (opts.json) {
+        const text = typeof response.content === 'string'
+          ? response.content
+          : response.content
+              .filter((b) => b.type === 'text')
+              .map((b) => (b.type === 'text' ? b.text : ''))
+              .join('');
+        console.log(JSON.stringify({
+          content: text,
+          usage: a.usage.total,
+          session: a.session.id,
+        }));
+      } else {
+        renderText('\n');
+      }
+    } catch (err) {
+      renderError((err as Error).message);
     }
     process.exit(0);
   }
 
-  // Interactive mode
-  console.log(chalk.dim(`ap ${VERSION} | ${currentModel} | /help for commands`));
-  console.log(chalk.dim(`session: ${agent.session.id}`));
+  // Interactive mode -- starts immediately, no API key needed
+  console.log(chalk.dim(`blush ${VERSION} | ${currentModel} | /help for commands`));
 
   const input = createInput();
 
   // Graceful shutdown
   process.on('SIGINT', async () => {
     renderText('\n');
-    await saveSession(agent.session);
-    console.log(chalk.dim(`Session saved: ${agent.session.id}`));
+    if (agent) {
+      await saveSession(agent.session);
+      console.log(chalk.dim(`Session saved: ${agent.session.id}`));
+    }
     input.close();
     process.exit(0);
   });
 
   const handleCommand = async (name: string, args: string): Promise<boolean> => {
     switch (name) {
-      case 'btw':
-        if (!args) {
-          renderError('/btw requires a question');
-          return true;
-        }
-        await btw(args, agent.getMessages(), provider, currentModel);
-        return true;
-
-      case 'compact':
-        await compact(agent.session, provider, currentModel, args || undefined);
-        return true;
-
-      case 'context':
-        showContext(agent.getMessages(), currentModel);
-        return true;
-
-      case 'branch':
-        renderLine(chalk.dim(`Conversation branched at: ${agent.session.currentBranch}`));
-        return true;
-
-      case 'copy':
-        copy(args, agent.getMessages());
-        return true;
-
+      // --- Commands that DON'T need the agent/API key ---
       case 'diff':
         showDiff();
-        return true;
-
-      case 'model':
-        if (!args) {
-          renderLine(chalk.dim(`Current model: ${currentModel}`));
-          return true;
-        }
-        try {
-          const resolved = resolveProvider(args);
-          currentModel = resolved.model;
-          renderLine(chalk.dim(`Switched to: ${currentModel}`));
-        } catch (err) {
-          renderError((err as Error).message);
-        }
-        return true;
-
-      case 'save':
-        await saveSession(agent.session);
-        renderLine(chalk.dim(`Session saved: ${agent.session.id}`));
-        return true;
-
-      case 'sessions': {
-        const sessions = await listSessions(cwd);
-        if (sessions.length === 0) {
-          renderLine(chalk.dim('No sessions.'));
-        } else {
-          for (const id of sessions) {
-            const marker = id === agent.session.id ? chalk.green(' (current)') : '';
-            renderLine(`  ${id}${marker}`);
-          }
-        }
-        return true;
-      }
-
-      case 'team':
-        await handleTeamCommand(args, cwd, provider, currentModel);
         return true;
 
       case 'skills':
@@ -343,45 +299,120 @@ export async function run(): Promise<void> {
         return true;
       }
 
+      case 'model':
+        if (!args) {
+          renderLine(chalk.dim(`Current model: ${currentModel}`));
+          return true;
+        }
+        currentModel = args.trim();
+        agent = null; // Force re-creation with new model
+        renderLine(chalk.dim(`Model set to: ${currentModel} (will resolve on next message)`));
+        return true;
+
+      case 'sessions': {
+        const sessions = await listSessions(cwd);
+        if (sessions.length === 0) {
+          renderLine(chalk.dim('No sessions.'));
+        } else {
+          for (const id of sessions) {
+            renderLine(`  ${id}`);
+          }
+        }
+        return true;
+      }
+
       case 'help':
         printHelp();
         return true;
 
       case 'exit':
       case 'quit':
-        await saveSession(agent.session);
-        console.log(chalk.dim(`Session saved: ${agent.session.id}`));
+        if (agent) {
+          await saveSession(agent.session);
+          console.log(chalk.dim(`Session saved: ${agent.session.id}`));
+        }
         input.close();
         process.exit(0);
 
-      default: {
-        // Check extension commands
-        const extCmd = agent.extensions.getCommand(name);
-        if (extCmd) {
-          await extCmd(args);
+      // --- Commands that NEED the agent/API key ---
+      case 'btw': {
+        if (!args) {
+          renderError('/btw requires a question');
           return true;
         }
+        const a = await getAgent();
+        const { provider: p } = resolveProvider(currentModel);
+        await btw(args, a.getMessages(), p, currentModel);
+        return true;
+      }
 
+      case 'compact': {
+        const a = await getAgent();
+        const { provider: p } = resolveProvider(currentModel);
+        await compact(a.session, p, currentModel, args || undefined);
+        return true;
+      }
+
+      case 'context': {
+        const a = await getAgent();
+        showContext(a.getMessages(), currentModel);
+        return true;
+      }
+
+      case 'branch': {
+        const a = await getAgent();
+        renderLine(chalk.dim(`Conversation branched at: ${a.session.currentBranch}`));
+        return true;
+      }
+
+      case 'copy': {
+        const a = await getAgent();
+        copy(args, a.getMessages());
+        return true;
+      }
+
+      case 'save': {
+        const a = await getAgent();
+        await saveSession(a.session);
+        renderLine(chalk.dim(`Session saved: ${a.session.id}`));
+        return true;
+      }
+
+      case 'team': {
+        const { provider: p } = resolveProvider(currentModel);
+        await handleTeamCommand(args, cwd, p, currentModel);
+        return true;
+      }
+
+      default: {
         // Check skill triggers
         const skill = skills.findByTrigger(`/${name}`);
         if (skill) {
           const content = skills.activate(skill.name);
           if (content) {
             renderLine(chalk.dim(`Activated skill: ${skill.name}`));
-            // Send skill content + any args as a message to the agent
-            const prompt = args
-              ? `${content}\n\nUser request: ${args}`
-              : content;
-            await agent.send(prompt);
+            const a = await getAgent();
+            const prompt = args ? `${content}\n\nUser request: ${args}` : content;
+            await a.send(prompt);
             renderText('\n');
           } else {
             renderLine(chalk.dim(`Skill ${skill.name} already active.`));
             if (args) {
-              await agent.send(args);
+              const a = await getAgent();
+              await a.send(args);
               renderText('\n');
             }
           }
           return true;
+        }
+
+        // Check extension commands (needs agent for extensions)
+        if (agent) {
+          const extCmd = agent.extensions.getCommand(name);
+          if (extCmd) {
+            await extCmd(args);
+            return true;
+          }
         }
 
         renderError(`Unknown command: /${name}`);
@@ -400,7 +431,7 @@ export async function run(): Promise<void> {
 
       if (!trimmed) continue;
 
-      // ! prefix: run bash command directly, add output to context
+      // ! prefix: run bash command directly
       if (trimmed.startsWith('!')) {
         const cmd = trimmed.slice(1).trim();
         if (cmd) {
@@ -410,12 +441,14 @@ export async function run(): Promise<void> {
             if (output.trim()) {
               renderLine(chalk.dim(output.trimEnd()));
             }
-            // Add to conversation so the agent can see it
-            const { addEntry } = await import('@blush/core');
-            addEntry(agent.session, {
-              role: 'user',
-              content: `[Shell command: ${cmd}]\n${output}`,
-            });
+            // Add to conversation context if agent exists
+            if (agent !== null) {
+              const { addEntry } = await import('@blush/core');
+              addEntry(agent!.session, {
+                role: 'user',
+                content: `[Shell command: ${cmd}]\n${output}`,
+              });
+            }
           } catch (err) {
             const e = err as { stderr?: string; message?: string };
             renderError(e.stderr || e.message || 'Command failed');
@@ -430,15 +463,21 @@ export async function run(): Promise<void> {
         continue;
       }
 
-      // Send to agent
-      await agent.send(trimmed);
-      renderText('\n');
+      // Send to agent (this triggers lazy init + API key check)
+      try {
+        const a = await getAgent();
+        await a.send(trimmed);
+        renderText('\n');
 
-      // Show prompt suggestions (non-blocking, uses sidecar)
-      showSuggestions(agent.getMessages(), provider, currentModel).catch(() => {});
+        // Show prompt suggestions (non-blocking)
+        const { provider: p } = resolveProvider(currentModel);
+        showSuggestions(a.getMessages(), p, currentModel).catch(() => {});
 
-      // Auto-save after each exchange
-      await saveSession(agent.session);
+        // Auto-save
+        await saveSession(a.session);
+      } catch (err) {
+        renderError((err as Error).message);
+      }
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ERR_USE_AFTER_CLOSE') break;
       renderError((err as Error).message);
