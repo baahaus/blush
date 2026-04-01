@@ -335,7 +335,7 @@ Analyze pending changes for security vulnerabilities...
 - [ ] Package registry (ap install <package>)
 - [x] OpenAI + generic providers
 - [x] OpenAI-compatible endpoint support (Ollama, vLLM, custom URLs)
-- [ ] Wren compression integration
+- [x] Wren compression integration (CLI + HTTP modes, auto-detect, tool output compression)
 - [x] /diff command (colorized git diff)
 - [x] Built-in skills: /security-review, /commit, /simplify
 
@@ -462,13 +462,18 @@ Analyze pending changes for security vulnerabilities...
 - Skill activation (sends prompt to agent)
 - Sidecar bash safety checks
 
+9. `(current)` -- Wren compression integration
+   - Auto-detects ~/wren/bin/wren CLI or HTTP endpoint
+   - Compresses tool output before adding to context window
+   - Two modes: input (prompts) and output (tool results)
+   - Silently skips when unavailable
+
 **Remaining work:**
 - Package registry (`ap install <package>`)
-- Wren compression integration
 - Prompt suggestions
 - End-to-end testing with real API key
 
 ---
 
 *Last updated: 2026-04-01*
-*Status: Phases 1-5 nearly complete. Core architecture, commands, team, ecosystem, and polish all implemented.*
+*Status: Phases 1-5 complete. All core features implemented. Remaining: package registry, prompt suggestions, e2e testing.*

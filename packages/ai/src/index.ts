@@ -25,3 +25,11 @@ export {
   summarizeConversation,
   generateSessionTitle,
 } from './sidecar.js';
+export {
+  initCompression,
+  compress,
+  compressToolOutput,
+  getCompressionConfig,
+  type CompressionResult,
+  type CompressionConfig,
+} from './compression.js';

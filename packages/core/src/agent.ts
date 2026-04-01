@@ -7,7 +7,7 @@ import type {
   StreamEvent,
   ToolUseContent,
 } from '@ap/ai';
-import { UsageTracker } from '@ap/ai';
+import { UsageTracker, compressToolOutput } from '@ap/ai';
 import { coreTools, findTool, getToolDefinitions, type CoreTool } from './tools/index.js';
 import { assembleContext } from './context.js';
 import { ExtensionManager } from './extensions.js';
@@ -93,13 +93,16 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
 
       onToolEnd?.(toolUse.name, result);
 
+      // Compress tool output before adding to context (if Wren available)
+      const compressed = await compressToolOutput(toolUse.name, result);
+
       // Fire post-tool event
-      await extensions.emit('tool:after', { name: toolUse.name, result });
+      await extensions.emit('tool:after', { name: toolUse.name, result: compressed });
 
       results.push({
         type: 'tool_result',
         tool_use_id: toolUse.id,
-        content: result,
+        content: compressed,
       });
     }
 
