@@ -3,9 +3,12 @@ import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 
 export default defineConfig([
-  // Library entry (no shebang)
+  // Library + SDK entries (no shebang)
   {
-    entry: { index: 'src/index.ts' },
+    entry: {
+      index: 'src/index.ts',
+      sdk: 'src/sdk.ts',
+    },
     format: ['esm'],
     dts: true,
     clean: true,

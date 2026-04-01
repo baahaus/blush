@@ -33,3 +33,11 @@ export {
   SkillRegistry,
   type Skill,
 } from './skills.js';
+export {
+  createCheckpoint,
+  listCheckpoints,
+  rewindToCheckpoint,
+  lastCheckpoint,
+  setCheckpointCwd,
+  type Checkpoint,
+} from './checkpoints.js';

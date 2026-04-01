@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { getTheme } from './themes.js';
 
 export interface RenderOptions {
   width?: number;
@@ -43,15 +44,18 @@ export function renderMarkdown(text: string): string {
 }
 
 export function renderToolStart(name: string): void {
-  process.stderr.write(chalk.dim(`  ${name} `));
+  const theme = getTheme();
+  process.stderr.write(chalk.hex(theme.dim)(`  ${name} `));
 }
 
 export function renderToolEnd(name: string, _result: string): void {
-  process.stderr.write(chalk.dim('done\n'));
+  const theme = getTheme();
+  process.stderr.write(chalk.hex(theme.dim)('done\n'));
 }
 
 export function renderError(error: string): void {
-  process.stderr.write(chalk.red(`Error: ${error}\n`));
+  const theme = getTheme();
+  process.stderr.write(chalk.hex(theme.error)(`Error: ${error}\n`));
 }
 
 export function renderStatus(parts: Record<string, string>): void {
@@ -62,7 +66,8 @@ export function renderStatus(parts: Record<string, string>): void {
 }
 
 export function renderPrompt(color?: string): void {
+  const theme = getTheme();
   const promptChar = '>';
-  const colorFn = color ? chalk.hex(color) : chalk.blue;
+  const colorFn = color ? chalk.hex(color) : chalk.hex(theme.prompt);
   process.stdout.write(colorFn(`\n${promptChar} `));
 }

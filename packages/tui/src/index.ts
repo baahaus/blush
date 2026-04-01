@@ -21,3 +21,11 @@ export {
   isCommand,
   parseCommand,
 } from './input.js';
+
+export {
+  themes,
+  setTheme,
+  getTheme,
+  listThemes,
+  type Theme,
+} from './themes.js';

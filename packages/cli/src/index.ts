@@ -12,6 +12,9 @@ import {
   renderToolEnd,
   renderError,
   renderPrompt,
+  setTheme,
+  getTheme,
+  listThemes,
 } from '@ap/tui';
 import { btw, compact, showContext, showDiff, handleTeamCommand, showSkills } from './commands/index.js';
 
@@ -20,7 +23,10 @@ const VERSION = '0.1.0';
 interface CliOptions {
   model: string;
   color?: string;
+  theme?: string;
   print?: string;
+  rpc?: boolean;
+  json?: boolean;
   resume?: boolean;
   sessionId?: string;
   newSession?: boolean;
@@ -45,6 +51,12 @@ function parseArgs(args: string[]): CliOptions {
       opts.sessionId = args[++i];
     } else if (arg === '--new' || arg === '-n') {
       opts.newSession = true;
+    } else if (arg === '--theme' || arg === '-t') {
+      opts.theme = args[++i];
+    } else if (arg === '--rpc') {
+      opts.rpc = true;
+    } else if (arg === '--json') {
+      opts.json = true;
     } else if (arg === '--version' || arg === '-v') {
       console.log(`ap ${VERSION}`);
       process.exit(0);
@@ -82,10 +94,13 @@ ${chalk.bold('ap')} -- Team CLI Agent from ap.haus
 ${chalk.bold('Usage:')}
   ap                        Interactive mode (new session)
   ap -p "question"          Print mode (single response)
+  ap -p "q" --json          Print mode with JSON output
+  ap --rpc                  RPC mode (JSONL over stdin/stdout)
   ap -r, --resume           Resume last session
   ap -s, --session <id>     Resume specific session
   ap -n, --new              Force new session
-  ap -m <model>             Set model
+  ap -m <model>             Set model (anthropic/openai/ollama/url)
+  ap -t, --theme <name>     Set color theme
   ap --color <hex>          Set prompt color
   ap sessions               List sessions for current directory
 
@@ -98,6 +113,7 @@ ${chalk.bold('Commands:')}
   /model <name>             Switch model
   /team <subcommand>        Team management
   /skills                   List installed skills
+  /theme [name]             Set or show color theme
   /save                     Save session now
   /sessions                 List sessions
   /help                     Show this help
@@ -111,10 +127,25 @@ ${chalk.bold('Keys:')}
 
 export async function run(): Promise<void> {
   const opts = parseArgs(process.argv.slice(2));
+
+  // RPC mode: JSONL over stdin/stdout, no TUI
+  if (opts.rpc) {
+    const { runRpc } = await import('./rpc.js');
+    await runRpc(opts.model);
+    return;
+  }
+
   const { provider, model: resolvedModel } = resolveProvider(opts.model);
   let currentModel = resolvedModel;
 
   const cwd = process.cwd();
+
+  // Apply theme
+  if (opts.theme) {
+    if (!setTheme(opts.theme)) {
+      console.error(`Unknown theme: ${opts.theme}. Available: ${listThemes().join(', ')}`);
+    }
+  }
 
   // Load skills
   const skills = new SkillRegistry();
@@ -169,8 +200,23 @@ export async function run(): Promise<void> {
 
   // Print mode: single question, single response, exit
   if (opts.print) {
-    await agent.send(opts.print);
-    renderText('\n');
+    const response = await agent.send(opts.print);
+    if (opts.json) {
+      // JSON output mode
+      const text = typeof response.content === 'string'
+        ? response.content
+        : response.content
+            .filter((b) => b.type === 'text')
+            .map((b) => (b.type === 'text' ? b.text : ''))
+            .join('');
+      console.log(JSON.stringify({
+        content: text,
+        usage: agent.usage.total,
+        session: agent.session.id,
+      }));
+    } else {
+      renderText('\n');
+    }
     process.exit(0);
   }
 
@@ -254,6 +300,23 @@ export async function run(): Promise<void> {
       case 'skills':
         showSkills(skills);
         return true;
+
+      case 'theme': {
+        if (!args) {
+          const current = getTheme();
+          const available = listThemes();
+          renderLine(chalk.dim(`Current: ${current.name}`));
+          renderLine(chalk.dim(`Available: ${available.join(', ')}`));
+          return true;
+        }
+        if (setTheme(args.trim())) {
+          const t = getTheme();
+          renderLine(chalk.hex(t.prompt)(`Theme set: ${t.name}`));
+        } else {
+          renderError(`Unknown theme: ${args}. Available: ${listThemes().join(', ')}`);
+        }
+        return true;
+      }
 
       case 'help':
         printHelp();

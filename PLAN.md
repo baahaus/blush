@@ -337,14 +337,16 @@ Analyze pending changes for security vulnerabilities...
 - [x] OpenAI-compatible endpoint support (Ollama, vLLM, custom URLs)
 - [ ] Wren compression integration
 - [x] /diff command (colorized git diff)
-- [x] Built-in skills: /security-review, /commit
+- [x] Built-in skills: /security-review, /commit, /simplify
 
 ### Phase 5 -- Polish
-- [ ] Haiku sidecar
-- [ ] Double-escape rewind
+- [x] Haiku sidecar (bash safety classification, conversation summarization, session titles)
+- [x] Checkpoint/rewind system (conversation + git state)
 - [ ] Prompt suggestions
-- [ ] Themes
-- [ ] RPC + SDK modes
+- [x] 7 color themes (default, mono, ocean, forest, sunset, rose, hacker)
+- [x] RPC mode (JSONL over stdin/stdout for embedding)
+- [x] SDK mode (createApSession() export for programmatic use)
+- [x] JSON output mode (--json flag for print mode)
 
 ---
 
@@ -417,27 +419,40 @@ Analyze pending changes for security vulnerabilities...
    - Built-in skills: /security-review, /commit
    - /skills command to list installed skills
 
-6. `(current)` -- OpenAI-compatible endpoints, /diff command
+6. `371b7f7` -- OpenAI-compatible endpoints, /diff command
    - Support for Ollama, vLLM, custom URLs (http://host:port/v1:model)
    - Built-in `ollama` and `local` provider aliases
    - /diff with colorized staged/unstaged changes
    - Config file default_provider support
 
+7. `f9474e5` -- /simplify skill
+
+8. `(current)` -- Phase 5 polish: sidecar, themes, RPC, SDK, checkpoints
+   - Haiku sidecar: bash safety classification, conversation summarization, session titles
+   - 7 color themes: default, mono, ocean, forest, sunset, rose, hacker
+   - /theme command + --theme flag
+   - RPC mode: JSONL over stdin/stdout for embedding in editors/tools
+   - SDK mode: createApSession() export for programmatic use
+   - JSON output: --json flag for print mode
+   - Checkpoint system: conversation + git state rewind after tool calls
+
 **What works:**
 - `ap --help`, `ap --version` -- binary runs standalone
 - `ap -p "question"` -- print mode (needs API key)
-- `ap` -- interactive REPL with 13 commands
+- `ap -p "q" --json` -- JSON output mode
+- `ap --rpc` -- RPC mode for embedding
+- `ap` -- interactive REPL with 16 commands
 - `ap -r` / `ap --session <id>` -- session resume
+- `ap -t ocean` / `/theme ocean` -- 7 color themes
 - `ap sessions` -- list sessions for cwd
 - `./packages/cli/dist/bin.js` -- runs directly (shebang + chmod)
-- `/diff` -- works in any git repo without API key
-- `/context` -- works without API key
-- `/skills` -- works without API key
+- `/diff`, `/context`, `/skills`, `/theme` -- work without API key
 - All 5 packages build clean in ~3s (full turbo cache in 7ms)
 - Extension system loads from ~/.ap/extensions/ and .ap/extensions/
 - Skills loaded from ~/.ap/skills/ and .ap/skills/
 - Provider auto-detection: claude*, gpt*, o1*, o3*
 - Custom endpoint support: `ollama:model`, `local:model`, `http://url:port/v1:model`
+- SDK: `import { createApSession } from '@ap/cli/sdk'`
 
 **What needs API key to test end-to-end:**
 - Full agent loop (send -> LLM -> tool calls -> loop)
@@ -445,12 +460,15 @@ Analyze pending changes for security vulnerabilities...
 - /compact conversation compression
 - /team spawn + synthesize
 - Skill activation (sends prompt to agent)
+- Sidecar bash safety checks
 
-**Known issues:**
-- Session resume mutates agent.session directly (should use a proper load path)
-- No conversation compaction on context limit (just errors)
+**Remaining work:**
+- Package registry (`ap install <package>`)
+- Wren compression integration
+- Prompt suggestions
+- End-to-end testing with real API key
 
 ---
 
 *Last updated: 2026-04-01*
-*Status: Phase 4 mostly complete -- Extension system + Skills + Provider ecosystem done*
+*Status: Phases 1-5 nearly complete. Core architecture, commands, team, ecosystem, and polish all implemented.*

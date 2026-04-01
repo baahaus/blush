@@ -19,3 +19,9 @@ export { createAnthropicProvider } from './providers/anthropic.js';
 export { createOpenAIProvider } from './providers/openai.js';
 export { registerProvider, getProvider, resolveProvider, UsageTracker } from './registry.js';
 export { loadConfig, getApiKey, type ApConfig } from './config.js';
+export {
+  configureSidecar,
+  classifyBashCommand,
+  summarizeConversation,
+  generateSessionTitle,
+} from './sidecar.js';

@@ -1,5 +1,6 @@
 import { Type, type Static } from '@sinclair/typebox';
 import { spawn } from 'node:child_process';
+import { classifyBashCommand } from '@ap/ai';
 
 export const BashParams = Type.Object({
   command: Type.String({ description: 'The shell command to execute' }),
@@ -8,8 +9,27 @@ export const BashParams = Type.Object({
 
 export type BashParams = Static<typeof BashParams>;
 
+// Set to true to enable sidecar safety checks on bash commands
+let safetyCheckEnabled = false;
+
+export function enableBashSafetyCheck(enabled: boolean): void {
+  safetyCheckEnabled = enabled;
+}
+
 export async function bash(params: BashParams): Promise<string> {
   const { command, timeout = 120000 } = params;
+
+  // Optional sidecar safety check
+  if (safetyCheckEnabled) {
+    try {
+      const classification = await classifyBashCommand(command);
+      if (!classification.safe) {
+        return `Command blocked by safety check: ${classification.reason || 'potentially dangerous'}\nCommand: ${command}`;
+      }
+    } catch {
+      // If sidecar unavailable, allow the command
+    }
+  }
 
   return new Promise((resolve) => {
     const proc = spawn('bash', ['-c', command], {
