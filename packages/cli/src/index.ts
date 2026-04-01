@@ -13,7 +13,7 @@ import {
   renderError,
   renderPrompt,
 } from '@ap/tui';
-import { btw, compact, showContext, handleTeamCommand, showSkills } from './commands/index.js';
+import { btw, compact, showContext, showDiff, handleTeamCommand, showSkills } from './commands/index.js';
 
 const VERSION = '0.1.0';
 
@@ -94,8 +94,10 @@ ${chalk.bold('Commands:')}
   /compact [focus]          Compress conversation
   /branch                   Fork conversation at current point
   /context                  Show context window usage
+  /diff                     Show uncommitted git changes
   /model <name>             Switch model
   /team <subcommand>        Team management
+  /skills                   List installed skills
   /save                     Save session now
   /sessions                 List sessions
   /help                     Show this help
@@ -207,6 +209,10 @@ export async function run(): Promise<void> {
 
       case 'branch':
         renderLine(chalk.dim(`Conversation branched at: ${agent.session.currentBranch}`));
+        return true;
+
+      case 'diff':
+        showDiff();
         return true;
 
       case 'model':

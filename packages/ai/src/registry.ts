@@ -1,12 +1,25 @@
 import type { Provider, ProviderConfig, TokenUsage } from './types.js';
 import { createAnthropicProvider } from './providers/anthropic.js';
 import { createOpenAIProvider } from './providers/openai.js';
+import { loadConfig } from './config.js';
 
 type ProviderFactory = (config: ProviderConfig) => Provider;
 
 const factories = new Map<string, ProviderFactory>([
   ['anthropic', createAnthropicProvider],
   ['openai', createOpenAIProvider],
+  // OpenAI-compatible endpoints (Ollama, vLLM, LM Studio, etc.)
+  // Use the OpenAI provider with custom baseUrl
+  ['ollama', (config) => createOpenAIProvider({
+    ...config,
+    baseUrl: config.baseUrl || 'http://localhost:11434/v1',
+    apiKey: config.apiKey || 'ollama', // Ollama doesn't need a real key
+  })],
+  ['local', (config) => createOpenAIProvider({
+    ...config,
+    baseUrl: config.baseUrl || 'http://localhost:8000/v1',
+    apiKey: config.apiKey || 'local',
+  })],
 ]);
 
 const instances = new Map<string, Provider>();
@@ -16,7 +29,8 @@ export function registerProvider(name: string, factory: ProviderFactory): void {
 }
 
 export function getProvider(name: string, config?: ProviderConfig): Provider {
-  const cached = instances.get(name);
+  const cacheKey = name + (config?.baseUrl || '');
+  const cached = instances.get(cacheKey);
   if (cached) return cached;
 
   const factory = factories.get(name);
@@ -25,12 +39,31 @@ export function getProvider(name: string, config?: ProviderConfig): Provider {
   }
 
   const provider = factory(config || {});
-  instances.set(name, provider);
+  instances.set(cacheKey, provider);
   return provider;
 }
 
+/**
+ * Resolve a model string to a provider + model name.
+ *
+ * Formats:
+ *   claude-sonnet-4-20250514           Auto-detect Anthropic
+ *   gpt-4o                             Auto-detect OpenAI
+ *   anthropic:claude-sonnet-4-20250514 Explicit provider
+ *   ollama:llama3.1                    Ollama on localhost:11434
+ *   local:qwen-2.5-coder              Local vLLM on localhost:8000
+ *   http://host:port/v1:model-name     Custom endpoint
+ */
 export function resolveProvider(model: string): { provider: Provider; model: string } {
-  // Check if model has provider prefix (e.g., "anthropic:claude-sonnet-4-20250514")
+  // Custom endpoint URL format: http://host:port/v1:model-name
+  const urlMatch = model.match(/^(https?:\/\/[^:]+:\d+\/[^:]*):(.+)$/);
+  if (urlMatch) {
+    const [, baseUrl, modelName] = urlMatch;
+    const provider = createOpenAIProvider({ baseUrl, apiKey: 'custom' });
+    return { provider, model: modelName };
+  }
+
+  // Explicit provider prefix
   if (model.includes(':')) {
     const [providerName, modelName] = model.split(':', 2);
     return { provider: getProvider(providerName), model: modelName };
@@ -44,7 +77,20 @@ export function resolveProvider(model: string): { provider: Provider; model: str
     return { provider: getProvider('openai'), model };
   }
 
-  throw new Error(`Cannot auto-detect provider for model: ${model}. Use "provider:model" format.`);
+  // Check config for default provider
+  const config = loadConfig();
+  if (config.default_provider) {
+    return { provider: getProvider(config.default_provider), model };
+  }
+
+  throw new Error(
+    `Cannot auto-detect provider for model: ${model}\n` +
+    'Use one of these formats:\n' +
+    '  anthropic:model-name\n' +
+    '  openai:model-name\n' +
+    '  ollama:model-name\n' +
+    '  http://host:port/v1:model-name'
+  );
 }
 
 // Session-level usage tracking

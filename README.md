@@ -44,11 +44,24 @@ echo 'ANTHROPIC_API_KEY=sk-ant-...' > .env
 ## Usage
 
 ```bash
-ap                          # Interactive mode
-ap -p "question"            # Print mode (single response, exit)
-ap -m claude-opus-4-20250514  # Use a specific model
-ap -r                       # Resume last session
-ap sessions                 # List sessions
+ap                                    # Interactive mode
+ap -p "question"                      # Print mode (single response, exit)
+ap -m claude-opus-4-20250514          # Use a specific model
+ap -m ollama:llama3.1                 # Use Ollama
+ap -m http://localhost:8000/v1:qwen   # Custom endpoint
+ap -r                                 # Resume last session
+ap sessions                           # List sessions
+```
+
+### Model Formats
+
+```bash
+claude-sonnet-4-20250514              # Auto-detect Anthropic
+gpt-4o                                # Auto-detect OpenAI
+anthropic:claude-opus-4-20250514      # Explicit provider
+ollama:llama3.1                       # Ollama (localhost:11434)
+local:qwen-2.5-coder                 # Local vLLM (localhost:8000)
+http://host:port/v1:model-name        # Any OpenAI-compatible endpoint
 ```
 
 ## Commands
@@ -59,12 +72,14 @@ ap sessions                 # List sessions
 | `/compact [focus]` | Compress conversation with optional focus |
 | `/branch` | Fork conversation at current point |
 | `/context` | Visualize context window usage |
+| `/diff` | Show uncommitted git changes with color |
 | `/model <name>` | Switch model mid-session |
 | `/team spawn <name>` | Create a peer agent with its own worktree |
 | `/team msg <name> <msg>` | Send message to an agent |
 | `/team status` | Show all agents and tasks |
 | `/team synthesize` | Combine all agent outputs |
 | `/team merge <name>` | Merge agent's changes back |
+| `/skills` | List installed skills |
 | `/save` | Save session |
 | `/help` | Show all commands |
 
@@ -113,14 +128,48 @@ AP reads instruction files hierarchically:
 - `./SYSTEM.md` -- full system prompt override
 - `./APPEND_SYSTEM.md` -- append to system prompt
 
-## Extending
+## Skills
+
+Skills are markdown files with frontmatter that inject context on-demand. Zero cost until activated.
+
+```bash
+~/.ap/skills/security-review.md    # Global skills
+.ap/skills/deploy.md               # Project skills
+```
+
+```markdown
+---
+name: security-review
+trigger: /security-review
+description: Analyze changes for vulnerabilities
+tools: [read, bash]
+---
+
+Analyze pending changes on the current branch...
+```
+
+Type `/security-review` in the REPL to activate. Use `/skills` to see all installed skills.
+
+**Built-in skills:** `/security-review`, `/commit`
+
+## Extensions
 
 Extensions are TypeScript modules loaded from `~/.ap/extensions/` or `.ap/extensions/`:
 
 ```typescript
 export default function activate(ap) {
+  // Register custom tools
   ap.tools.register({ name: 'my-tool', ... });
+
+  // Register commands
   ap.commands.register('/my-cmd', async (args) => { ... });
+
+  // Hook into events
+  ap.events.on('tool:before', async (data) => { ... });
+  ap.events.on('tool:after', async (data) => { ... });
+
+  // Inject context into system prompt
+  ap.context.append('Always consider accessibility...');
 }
 ```
 

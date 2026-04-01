@@ -330,17 +330,18 @@ Analyze pending changes for security vulnerabilities...
 - [ ] Pipeline pattern (sequential handoff)
 
 ### Phase 4 -- Ecosystem
-- [ ] Extension loading + API
-- [ ] Skills system
-- [ ] Package registry
-- [ ] OpenAI + Gemini providers
-- [ ] OpenAI-compatible endpoint support
+- [x] Extension loading + API (register tools, commands, events, context)
+- [x] Skills system (markdown+frontmatter, progressive disclosure, /skills command)
+- [ ] Package registry (ap install <package>)
+- [x] OpenAI + generic providers
+- [x] OpenAI-compatible endpoint support (Ollama, vLLM, custom URLs)
 - [ ] Wren compression integration
+- [x] /diff command (colorized git diff)
+- [x] Built-in skills: /security-review, /commit
 
 ### Phase 5 -- Polish
 - [ ] Haiku sidecar
 - [ ] Double-escape rewind
-- [ ] Diff viewer
 - [ ] Prompt suggestions
 - [ ] Themes
 - [ ] RPC + SDK modes
@@ -409,27 +410,47 @@ Analyze pending changes for security vulnerabilities...
    - Updated all phase checklists
    - Added this progress log
 
+5. `921b6ea` -- Extension system and skills with progressive disclosure
+   - ExtensionManager: load .js/.mjs, register tools/commands/events/context
+   - SkillRegistry: markdown+frontmatter, progressive disclosure, trigger matching
+   - Extension tools merged into agent loop with pre/post events
+   - Built-in skills: /security-review, /commit
+   - /skills command to list installed skills
+
+6. `(current)` -- OpenAI-compatible endpoints, /diff command
+   - Support for Ollama, vLLM, custom URLs (http://host:port/v1:model)
+   - Built-in `ollama` and `local` provider aliases
+   - /diff with colorized staged/unstaged changes
+   - Config file default_provider support
+
 **What works:**
 - `ap --help`, `ap --version` -- binary runs standalone
 - `ap -p "question"` -- print mode (needs API key)
-- `ap` -- interactive REPL with all commands
+- `ap` -- interactive REPL with 13 commands
+- `ap -r` / `ap --session <id>` -- session resume
 - `ap sessions` -- list sessions for cwd
-- All 5 packages build clean in ~3s
-- Error messages guide users to set up auth
+- `./packages/cli/dist/bin.js` -- runs directly (shebang + chmod)
+- `/diff` -- works in any git repo without API key
+- `/context` -- works without API key
+- `/skills` -- works without API key
+- All 5 packages build clean in ~3s (full turbo cache in 7ms)
+- Extension system loads from ~/.ap/extensions/ and .ap/extensions/
+- Skills loaded from ~/.ap/skills/ and .ap/skills/
+- Provider auto-detection: claude*, gpt*, o1*, o3*
+- Custom endpoint support: `ollama:model`, `local:model`, `http://url:port/v1:model`
 
-**What needs API key to test:**
+**What needs API key to test end-to-end:**
 - Full agent loop (send -> LLM -> tool calls -> loop)
 - /btw ephemeral questions
 - /compact conversation compression
-- /team spawn (needs working agent + git repo)
-- /team synthesize (needs multiple agent outputs)
+- /team spawn + synthesize
+- Skill activation (sends prompt to agent)
 
 **Known issues:**
-- tsup banner adds shebang to all output files, not just bin.js
-- No `chmod +x` on bin.js after build
 - Session resume mutates agent.session directly (should use a proper load path)
+- No conversation compaction on context limit (just errors)
 
 ---
 
 *Last updated: 2026-04-01*
-*Status: Phase 3 complete -- moving to Phase 4 (Ecosystem)*
+*Status: Phase 4 mostly complete -- Extension system + Skills + Provider ecosystem done*
