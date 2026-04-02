@@ -97,6 +97,7 @@ export function createOpenAIProvider(config: ProviderConfig): Provider {
       messages: toOpenAIMessages(request.messages, request.system),
       max_tokens: request.maxTokens || 8192,
       stream: true,
+      stream_options: { include_usage: true },
     };
 
     const tools = toOpenAITools(request);
@@ -154,6 +155,18 @@ export function createOpenAIProvider(config: ProviderConfig): Provider {
           chunk = JSON.parse(data);
         } catch {
           continue;
+        }
+
+        // OpenAI sends usage in the final chunk (when stream_options.include_usage is true)
+        const chunkUsage = chunk.usage as Record<string, number> | undefined;
+        if (chunkUsage) {
+          yield {
+            type: 'usage',
+            usage: {
+              inputTokens: chunkUsage.prompt_tokens || 0,
+              outputTokens: chunkUsage.completion_tokens || 0,
+            },
+          };
         }
 
         const choices = chunk.choices as Array<Record<string, unknown>>;
