@@ -13,6 +13,22 @@ import { getAnthropicAuth } from '../auth.js';
 
 const MAX_INTERACTIVE_RETRY_WAIT_MS = 10_000;
 
+/** Parse raw API error body into a clean human-readable message. */
+function formatApiError(status: number, raw: string): string {
+  try {
+    const parsed = JSON.parse(raw);
+    const msg = parsed?.error?.message || parsed?.message;
+    if (msg) {
+      return `API error ${status}: ${msg}`;
+    }
+  } catch {
+    // Not JSON, use raw
+  }
+  // Truncate long raw responses
+  const clean = raw.slice(0, 200).trim();
+  return `API error ${status}: ${clean}`;
+}
+
 export function getAnthropicRetryDelayMs(
   retryAfterHeader: string | null,
   attempt: number,
@@ -137,8 +153,8 @@ export function createAnthropicProvider(config: ProviderConfig): Provider {
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      yield { type: 'error', error: `Anthropic API error ${response.status}: ${error}` };
+      const raw = await response.text();
+      yield { type: 'error', error: formatApiError(response.status, raw) };
       return;
     }
 
@@ -151,6 +167,10 @@ export function createAnthropicProvider(config: ProviderConfig): Provider {
     const decoder = new TextDecoder();
     let buffer = '';
     let currentToolUse: { id: string; name: string; input: string } | null = null;
+    let streamUsage: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number } = {
+      inputTokens: 0,
+      outputTokens: 0,
+    };
 
     while (true) {
       const { done, value } = await reader.read();
@@ -174,7 +194,24 @@ export function createAnthropicProvider(config: ProviderConfig): Provider {
 
         const eventType = event.type as string;
 
-        if (eventType === 'content_block_start') {
+        if (eventType === 'message_start') {
+          // Anthropic sends input token count in message_start
+          const msg = event.message as Record<string, unknown> | undefined;
+          const usage = msg?.usage as Record<string, number> | undefined;
+          if (usage) {
+            streamUsage.inputTokens = usage.input_tokens || 0;
+            streamUsage.cacheReadTokens = usage.cache_read_input_tokens;
+            streamUsage.cacheWriteTokens = usage.cache_creation_input_tokens;
+          }
+        } else if (eventType === 'message_delta') {
+          // Anthropic sends output token count in message_delta
+          const usage = event.usage as Record<string, number> | undefined;
+          if (usage) {
+            streamUsage.outputTokens = usage.output_tokens || 0;
+          }
+          // Emit accumulated usage
+          yield { type: 'usage', usage: { ...streamUsage } };
+        } else if (eventType === 'content_block_start') {
           const block = event.content_block as Record<string, unknown>;
           if (block.type === 'tool_use') {
             currentToolUse = {
@@ -230,8 +267,8 @@ export function createAnthropicProvider(config: ProviderConfig): Provider {
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Anthropic API error ${response.status}: ${error}`);
+      const raw = await response.text();
+      throw new Error(formatApiError(response.status, raw));
     }
 
     const data = (await response.json()) as Record<string, unknown>;

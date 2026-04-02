@@ -102,7 +102,7 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
 
       results.push({
         type: 'tool_result',
-        tool_use_id: toolUse.id,
+        tool_use_id: toolUse.call_id || toolUse.id,
         content: compressed,
       });
     }
@@ -133,7 +133,11 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
         // Streaming path
         const collected: ContentBlock[] = [];
         let currentText = '';
-        const pendingToolUses: Map<string, { id: string; name: string; input: string }> = new Map();
+        let streamUsage: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number } = {
+          inputTokens: 0,
+          outputTokens: 0,
+        };
+        const pendingToolUses: Map<string, { id: string; name: string; input: string; callId?: string }> = new Map();
 
         for await (const event of provider.stream(request)) {
           onStream(event);
@@ -141,6 +145,11 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
           switch (event.type) {
             case 'text':
               currentText += event.text || '';
+              break;
+            case 'usage':
+              if (event.usage) {
+                streamUsage = { ...event.usage };
+              }
               break;
             case 'tool_use_start':
               if (event.toolUse) {
@@ -161,7 +170,7 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
                 } catch {
                   input = {};
                 }
-                collected.push({ type: 'tool_use', id: tu.id, name: tu.name, input });
+                collected.push({ type: 'tool_use', id: tu.id, name: tu.name, input, call_id: tu.callId });
               }
               break;
             case 'error':
@@ -177,7 +186,7 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
 
         response = {
           message: { role: 'assistant', content: collected },
-          usage: { inputTokens: 0, outputTokens: 0 }, // Not available in stream mode
+          usage: streamUsage,
           stopReason: hasToolUse ? 'tool_use' : 'end_turn',
         };
       } else {

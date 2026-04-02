@@ -19,6 +19,7 @@ export interface ToolUseContent {
   id: string;
   name: string;
   input: Record<string, unknown>;
+  call_id?: string;
 }
 
 export interface ToolResultContent {
@@ -51,14 +52,16 @@ export interface ToolDefinition {
 // --- Provider ---
 
 export interface StreamEvent {
-  type: 'text' | 'tool_use_start' | 'tool_use_delta' | 'tool_use_end' | 'thinking' | 'done' | 'error';
+  type: 'text' | 'tool_use_start' | 'tool_use_delta' | 'tool_use_end' | 'thinking' | 'done' | 'error' | 'usage';
   text?: string;
   toolUse?: {
     id: string;
     name: string;
     input: string; // partial JSON accumulated
+    callId?: string;
   };
   error?: string;
+  usage?: TokenUsage;
 }
 
 export interface CompletionRequest {
