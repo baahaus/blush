@@ -17,6 +17,7 @@ export {
   renderTeamStatus,
   renderPrompt,
   renderWelcome,
+  renderGoodbye,
   clearLine,
   moveCursorUp,
 } from './renderer.js';

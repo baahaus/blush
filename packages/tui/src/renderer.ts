@@ -36,13 +36,33 @@ export function renderPrompt(color?: string): void {
 // Welcome banner
 // ─────────────────────────────────────────
 
+function timeGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 5) return 'burning the midnight oil?';
+  if (hour < 9) return 'early bird gets the merge.';
+  if (hour < 12) return 'good morning.';
+  if (hour < 17) return 'good afternoon.';
+  if (hour < 21) return 'good evening.';
+  return 'night owl mode.';
+}
+
+const farewells = [
+  'until next time.',
+  'happy shipping.',
+  'go build something great.',
+  'see you soon.',
+  'good work today.',
+  'take care out there.',
+];
+
 export function renderWelcome(version: string, model: string): void {
   const theme = getTheme();
   const w = Math.min(process.stdout.columns || 80, 56);
+  const greeting = timeGreeting();
 
   const lines = [
     '',
-    `${chalk.hex(theme.prompt).bold('blush')} ${chalk.hex(theme.dim)(`v${version}`)}`,
+    `${chalk.hex(theme.prompt).bold('blush')} ${chalk.hex(theme.dim)(`v${version}`)} ${chalk.hex(theme.muted)(sym.dash)} ${chalk.hex(theme.dim)(greeting)}`,
     '',
     chalk.hex(theme.dim)(dotLeader('model', model, w - 6)),
     chalk.hex(theme.dim)(dotLeader('theme', theme.label, w - 6)),
@@ -56,6 +76,21 @@ export function renderWelcome(version: string, model: string): void {
   for (const line of bordered) {
     renderLine(chalk.hex(theme.border)(line));
   }
+  renderLine('');
+}
+
+/**
+ * Graceful goodbye on exit -- warm sign-off.
+ */
+export function renderGoodbye(sessionId?: string): void {
+  const theme = getTheme();
+  const farewell = farewells[Math.floor(Math.random() * farewells.length)];
+
+  renderLine('');
+  if (sessionId) {
+    renderLine(`  ${chalk.hex(theme.success)(sym.toolDone)} ${chalk.hex(theme.dim)(`session saved: ${sessionId}`)}`);
+  }
+  renderLine(`  ${chalk.hex(theme.prompt)(sym.prompt)} ${chalk.hex(theme.dim)(farewell)}`);
   renderLine('');
 }
 
@@ -76,7 +111,15 @@ export function renderToolEnd(name: string, result: string): void {
 
   // Compute a compact summary
   const lineCount = result.split('\n').length;
-  const summary = lineCount > 1 ? `${lineCount} lines` : result.slice(0, 40).trim();
+  let summary: string;
+
+  if (name === 'edit' && result.toLowerCase().includes('applied')) {
+    summary = 'applied';
+  } else if (lineCount > 1) {
+    summary = `${lineCount} lines`;
+  } else {
+    summary = result.slice(0, 50).trim() || 'done';
+  }
 
   process.stderr.write(
     `${chalk.hex(theme.success)(sym.toolDone)} ${chalk.hex(theme.muted)(summary)}\n`,

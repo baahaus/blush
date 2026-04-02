@@ -14,6 +14,7 @@ import {
   renderDim,
   renderPrompt,
   renderWelcome,
+  renderGoodbye,
   renderStatus,
   renderDivider,
   renderHelp,
@@ -291,7 +292,9 @@ export async function run(): Promise<void> {
     renderText('\n');
     if (agent) {
       await saveSession(agent.session);
-      renderDim(`  Session saved: ${agent.session.id}`);
+      renderGoodbye(agent.session.id);
+    } else {
+      renderGoodbye();
     }
     input.close();
     process.exit(0);
@@ -353,7 +356,9 @@ export async function run(): Promise<void> {
       case 'quit':
         if (agent) {
           await saveSession(agent.session);
-          renderDim(`  Session saved: ${agent.session.id}`);
+          renderGoodbye(agent.session.id);
+        } else {
+          renderGoodbye();
         }
         input.close();
         process.exit(0);
