@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -8,6 +9,7 @@ export interface ApConfig {
   anthropic_api_key?: string;
   openai_api_key?: string;
   default_model?: string;
+  default_theme?: string;
   default_provider?: string;
 }
 
@@ -56,4 +58,19 @@ export function getApiKey(provider: 'anthropic' | 'openai'): string | undefined 
   }
 
   return undefined;
+}
+
+export async function saveConfig(config: ApConfig): Promise<void> {
+  await mkdir(join(homedir(), '.blush'), { recursive: true });
+  await writeFile(BLUSH_CONFIG_PATH, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+  cached = config;
+}
+
+export async function updateConfig(patch: Partial<ApConfig>): Promise<ApConfig> {
+  const nextConfig: ApConfig = {
+    ...loadConfig(),
+    ...patch,
+  };
+  await saveConfig(nextConfig);
+  return nextConfig;
 }

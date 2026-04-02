@@ -68,6 +68,7 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
   if (appendedCtx.length > 0) {
     systemPrompt += '\n\n' + appendedCtx.join('\n\n');
   }
+  const maxToolRounds = 24;
 
   async function runToolCalls(content: ContentBlock[]): Promise<Message> {
     const toolUses = content.filter((b): b is ToolUseContent => b.type === 'tool_use');
@@ -114,6 +115,9 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
     // Add user message to session
     const userMessage: Message = { role: 'user', content };
     addEntry(session, userMessage);
+    let toolRoundCount = 0;
+    let lastToolSignature = '';
+    let repeatedToolSignatureCount = 0;
 
     // Agent loop: send -> tool calls -> send results -> repeat
     while (true) {
@@ -205,10 +209,32 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
         return response.message;
       }
 
+      toolRoundCount++;
+      if (toolRoundCount > maxToolRounds) {
+        throw new Error(`Tool loop exceeded ${maxToolRounds} rounds`);
+      }
+
       // Execute tool calls and add results
       const blocks = Array.isArray(response.message.content)
         ? response.message.content
         : [];
+
+      const toolUses = blocks.filter((b): b is ToolUseContent => b.type === 'tool_use');
+      const toolSignature = JSON.stringify(toolUses.map((toolUse) => ({
+        name: toolUse.name,
+        input: toolUse.input,
+      })));
+
+      if (toolSignature && toolSignature === lastToolSignature) {
+        repeatedToolSignatureCount++;
+      } else {
+        lastToolSignature = toolSignature;
+        repeatedToolSignatureCount = 1;
+      }
+
+      if (repeatedToolSignatureCount >= 3) {
+        throw new Error(`Detected repeated tool loop: ${toolSignature}`);
+      }
 
       const toolResultMessage = await runToolCalls(blocks);
       addEntry(session, toolResultMessage);

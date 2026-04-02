@@ -25,6 +25,30 @@ interface CodexAuth {
   last_refresh: string;
 }
 
+function stringifyFunctionArguments(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value && typeof value === 'object') return JSON.stringify(value);
+  return '';
+}
+
+export function getCodexFunctionCallInput(item: Record<string, unknown> | undefined): string {
+  if (!item) return '';
+
+  const directArguments = stringifyFunctionArguments(item.arguments);
+  if (directArguments) return directArguments;
+
+  const directInput = stringifyFunctionArguments(item.input);
+  if (directInput) return directInput;
+
+  const fn = item.function;
+  if (fn && typeof fn === 'object') {
+    const nestedArguments = stringifyFunctionArguments((fn as Record<string, unknown>).arguments);
+    if (nestedArguments) return nestedArguments;
+  }
+
+  return '';
+}
+
 function isTokenExpired(token: string): boolean {
   try {
     const parts = token.split('.');
@@ -201,8 +225,9 @@ export function createCodexProvider(config: ProviderConfig): Provider {
             const itemId = item.id as string || '';
             const callId = item.call_id as string || itemId;
             const name = item.name as string || '';
-            pendingToolCalls.set(callId, { id: itemId || callId, name, input: '', callId });
-            yield { type: 'tool_use_start', toolUse: { id: itemId || callId, name, input: '', callId } };
+            const input = getCodexFunctionCallInput(item);
+            pendingToolCalls.set(callId, { id: itemId || callId, name, input, callId });
+            yield { type: 'tool_use_start', toolUse: { id: itemId || callId, name, input, callId } };
           }
         } else if (type === 'response.function_call_arguments.delta') {
           const callId = event.call_id as string || event.item_id as string || '';
@@ -215,8 +240,25 @@ export function createCodexProvider(config: ProviderConfig): Provider {
           const callId = event.call_id as string || event.item_id as string || '';
           const tc = pendingToolCalls.get(callId);
           if (tc) {
-            tc.input = event.arguments as string || tc.input;
+            tc.input = stringifyFunctionArguments(event.arguments) || tc.input;
             yield { type: 'tool_use_end', toolUse: { ...tc, callId } };
+            pendingToolCalls.delete(callId);
+          }
+        } else if (type === 'response.output_item.done') {
+          const item = event.item as Record<string, unknown> | undefined;
+          if (item?.type === 'function_call') {
+            const itemId = item.id as string || '';
+            const callId = item.call_id as string || itemId;
+            const name = item.name as string || '';
+            const input = getCodexFunctionCallInput(item);
+            const existing = pendingToolCalls.get(callId);
+            const toolUse = {
+              id: itemId || callId,
+              name: existing?.name || name,
+              input: input || existing?.input || '',
+              callId,
+            };
+            yield { type: 'tool_use_end', toolUse };
             pendingToolCalls.delete(callId);
           }
         } else if (type === 'response.completed') {

@@ -18,6 +18,10 @@ export function clearLine(): void {
   process.stdout.write('\r\x1b[K');
 }
 
+export function deleteLine(): void {
+  process.stdout.write('\r\x1b[M');
+}
+
 export function moveCursorUp(n = 1): void {
   process.stdout.write(`\x1b[${n}A`);
 }
@@ -55,19 +59,20 @@ const farewells = [
   'take care out there.',
 ];
 
-export function renderWelcome(version: string, model: string): void {
+export function renderWelcome(version: string, model: string, project = 'workspace', session = 'new session'): void {
   const theme = getTheme();
-  const w = Math.min(process.stdout.columns || 80, 56);
-  const greeting = timeGreeting();
+  const w = Math.min(process.stdout.columns || 80, 64);
 
   const lines = [
     '',
-    `${chalk.hex(theme.prompt).bold('blush')} ${chalk.hex(theme.dim)(`v${version}`)} ${chalk.hex(theme.muted)(sym.dash)} ${chalk.hex(theme.dim)(greeting)}`,
+    `${chalk.hex(theme.prompt).bold('blush')} ${chalk.hex(theme.dim)(`v${version}`)} ${chalk.hex(theme.muted)(sym.dot)} ${chalk.hex(theme.text)('workspace ready')}`,
     '',
+    chalk.hex(theme.dim)(dotLeader('project', project, w - 6)),
     chalk.hex(theme.dim)(dotLeader('model', model, w - 6)),
+    chalk.hex(theme.dim)(dotLeader('session', session, w - 6)),
     chalk.hex(theme.dim)(dotLeader('theme', theme.label, w - 6)),
     '',
-    chalk.hex(theme.muted)(`${sym.prompt} type to chat ${sym.dot} /help for commands`),
+    chalk.hex(theme.muted)(`${sym.prompt} /model switch ${sym.dot} /theme style ${sym.dot} /help commands`),
     '',
   ];
 

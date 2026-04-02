@@ -8,8 +8,10 @@ export {
   saveSession,
   loadSession,
   listSessions,
+  listSessionSummaries,
   type Session,
   type SessionEntry,
+  type SessionSummary,
 } from './session.js';
 export {
   coreTools,
@@ -21,6 +23,11 @@ export { readTool, read } from './tools/read.js';
 export { writeTool, write } from './tools/write.js';
 export { editTool, edit } from './tools/edit.js';
 export { bashTool, bash } from './tools/bash.js';
+export { globTool, glob } from './tools/glob.js';
+export { grepTool, grep } from './tools/grep.js';
+export { todoTool, todo } from './tools/todo.js';
+export { webFetchTool, webFetch } from './tools/web-fetch.js';
+export { webSearchTool, webSearch } from './tools/web-search.js';
 export {
   ExtensionManager,
   type BlushContext,

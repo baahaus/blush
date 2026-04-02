@@ -1,6 +1,27 @@
 import chalk from 'chalk';
-import type { Message } from '@blush/ai';
-import { renderLine } from '@blush/tui';
+import { resolveProvider, type Message } from '@blush/ai';
+import { renderLine, getTheme, sym, deleteLine, moveCursorUp } from '@blush/tui';
+
+/** How many lines the last suggestion block took (0 = none shown) */
+let lastSuggestionLines = 0;
+
+/**
+ * Clear previously rendered suggestions from the terminal.
+ * Call this before rendering the next prompt.
+ */
+export function clearSuggestions(): void {
+  clearSuggestionsBelowCursor(0);
+}
+
+export function clearSuggestionsBelowCursor(linesBelowCursor: number): void {
+  if (lastSuggestionLines > 0) {
+    moveCursorUp(lastSuggestionLines + linesBelowCursor);
+    for (let i = 0; i < lastSuggestionLines; i++) {
+      deleteLine();
+    }
+    lastSuggestionLines = 0;
+  }
+}
 
 /**
  * Generate and display prompt suggestions after an agent response.
@@ -15,7 +36,18 @@ export async function showSuggestions(
   if (messages.length < 2) return;
 
   try {
-    // Get the last few messages for context
+    const suggestionModel = (() => {
+      try {
+        return resolveProvider('claude-haiku-4-20250414');
+      } catch {
+        try {
+          return resolveProvider('gpt-4o-mini');
+        } catch {
+          return { provider, model };
+        }
+      }
+    })();
+
     const recentMessages = messages.slice(-4);
     const context = recentMessages
       .map((m) => {
@@ -29,8 +61,8 @@ export async function showSuggestions(
       })
       .join('\n');
 
-    const response = await (provider as any).complete({
-      model,
+    const response = await (suggestionModel.provider as any).complete({
+      model: suggestionModel.model,
       messages: [
         {
           role: 'user',
@@ -59,10 +91,15 @@ Respond with exactly 3 lines, one suggestion per line. No numbering, no bullets,
       .slice(0, 3);
 
     if (suggestions.length > 0) {
-      renderLine(chalk.dim('\n  Suggestions:'));
+      const theme = getTheme();
+      let lines = 0;
+      renderLine('');
+      lines++;
       for (const s of suggestions) {
-        renderLine(chalk.dim(`    ${chalk.cyan('>')} ${s}`));
+        renderLine(`  ${chalk.hex(theme.muted)(sym.prompt)} ${chalk.hex(theme.dim)(s)}`);
+        lines++;
       }
+      lastSuggestionLines = lines;
     }
   } catch {
     // Silently skip if sidecar unavailable

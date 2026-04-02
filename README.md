@@ -122,7 +122,7 @@ Output is added to the conversation context so the agent can see it.
 ```
 @blush/ai     Multi-provider LLM + sidecar + compression
   |
-@blush/core   Agent loop + 4 tools + extensions + skills + checkpoints
+@blush/core   Agent loop + core tools + extensions + skills + checkpoints
   |
 @blush/tui    Terminal UI + overlays + themes
   |
@@ -131,7 +131,7 @@ Output is added to the conversation context so the agent can see it.
 @blush/team   Peer agents + worktrees + mailbox + task queue
 ```
 
-### 4 Core Tools
+### Core Tools
 
 Pi.dev proved it: frontier models don't need 30 built-in tools.
 
@@ -141,6 +141,11 @@ Pi.dev proved it: frontier models don't need 30 built-in tools.
 | `write` | Create/overwrite files |
 | `edit` | Exact string replacement |
 | `bash` | Shell execution with optional safety checks |
+| `glob` | Find files by pattern |
+| `grep` | Search file contents with regex |
+| `todo` | Read/update the agent's task list |
+| `web_fetch` | Fetch a web page and extract readable text |
+| `web_search` | Search the web for current information |
 
 ### Team-Native
 

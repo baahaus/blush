@@ -51,6 +51,8 @@ export const sym = {
   team: '\u2261',           // ≡ identical to (hamburger)
 } as const;
 
+const ansiPattern = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+
 /** Build a dotted leader between label and value */
 export function dotLeader(label: string, value: string, width: number): string {
   const padding = Math.max(2, width - label.length - value.length);
@@ -69,7 +71,8 @@ export function box(lines: string[], width: number): string[] {
 
   result.push(`${sym.boxTL}${sym.boxH.repeat(inner + 2)}${sym.boxTR}`);
   for (const line of lines) {
-    const padded = line.padEnd(inner);
+    const visible = line.replace(ansiPattern, '');
+    const padded = line + ' '.repeat(Math.max(0, inner - visible.length));
     result.push(`${sym.boxV} ${padded} ${sym.boxV}`);
   }
   result.push(`${sym.boxBL}${sym.boxH.repeat(inner + 2)}${sym.boxBR}`);

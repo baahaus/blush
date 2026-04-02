@@ -22,6 +22,16 @@ export interface Session {
   currentBranch: string; // ID of the latest entry in the active branch
 }
 
+export interface SessionSummary {
+  id: string;
+  cwd: string;
+  createdAt: number;
+  updatedAt: number;
+  entryCount: number;
+  activeMessageCount: number;
+  title: string;
+}
+
 function encodeCwd(cwd: string): string {
   return createHash('sha256').update(cwd).digest('hex').slice(0, 16);
 }
@@ -126,12 +136,57 @@ export async function loadSession(cwd: string, sessionId: string): Promise<Sessi
 }
 
 export async function listSessions(cwd: string): Promise<string[]> {
+  const summaries = await listSessionSummaries(cwd);
+  return summaries.map((summary) => summary.id);
+}
+
+function getMessageText(message: Message): string {
+  if (typeof message.content === 'string') {
+    return message.content.trim();
+  }
+
+  return message.content
+    .filter((block) => block.type === 'text')
+    .map((block) => (block.type === 'text' ? block.text : ''))
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function summarizeSession(session: Session): SessionSummary {
+  const activeMessages = getActiveMessages(session);
+  const firstEntry = session.entries[0];
+  const lastEntry = session.entries[session.entries.length - 1];
+  const firstUserMessage = activeMessages.find((message) => message.role === 'user');
+  const rawTitle = firstUserMessage ? getMessageText(firstUserMessage) : '';
+  const title = rawTitle
+    ? rawTitle.slice(0, 72)
+    : 'Untitled session';
+
+  return {
+    id: session.id,
+    cwd: session.cwd,
+    createdAt: firstEntry?.timestamp ?? 0,
+    updatedAt: lastEntry?.timestamp ?? 0,
+    entryCount: session.entries.length,
+    activeMessageCount: activeMessages.length,
+    title,
+  };
+}
+
+export async function listSessionSummaries(cwd: string): Promise<SessionSummary[]> {
   const dir = sessionDir(cwd);
   if (!existsSync(dir)) return [];
 
   const { readdir } = await import('node:fs/promises');
   const files = await readdir(dir);
-  return files
+  const sessionIds = files
     .filter((f) => f.endsWith('.jsonl'))
     .map((f) => f.replace('.jsonl', ''));
+
+  const loaded = await Promise.all(sessionIds.map((sessionId) => loadSession(cwd, sessionId)));
+  return loaded
+    .filter((session): session is Session => Boolean(session))
+    .map((session) => summarizeSession(session))
+    .sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt || a.id.localeCompare(b.id));
 }

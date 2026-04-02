@@ -19,6 +19,7 @@ export {
   renderWelcome,
   renderGoodbye,
   clearLine,
+  deleteLine,
   moveCursorUp,
 } from './renderer.js';
 

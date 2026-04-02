@@ -10,9 +10,48 @@ Three pillars, stolen from the best and combined into something new:
 2. **Claude Code's best ideas** -- /btw, agent teams, /compact, /branch, conversation forking
 3. **Team-native from day 1** -- multi-agent coordination is core architecture, not an extension
 
-AP is a terminal coding agent where agents are peers. Not parent-child. Not orchestrator-worker. Peers that coordinate through mailboxes, share context through worktrees, and reach consensus through structured synthesis.
+Blush is a terminal coding agent where agents are peers. Not parent-child. Not orchestrator-worker. Peers that coordinate through mailboxes, share context through worktrees, and reach consensus through structured synthesis.
 
-The name is the brand. `ap` is the CLI. `ap.haus` is the research org. The tool embodies the research.
+Blush is the CLI. `ap.haus` is the research org. The tool embodies the research.
+
+---
+
+## April 2026 Reality Check
+
+Blush has the right package shape and a credible core loop, but it does not yet feel as polished or trustworthy as Claude Code, Codex, or Amp.
+
+Current product gaps:
+- Session continuity needs to feel first-class: deterministic resume, richer metadata, visible history, branch navigation
+- Trust surfaces need work: cost reporting must be accurate or omitted, model/provider behavior needs clearer framing
+- Input still feels like a basic REPL instead of a terminal-native composer
+- Tool execution needs a better timeline with calmer defaults and better expansion for detail
+- Team workflows exist, but the implementation is thinner than the product story implies
+
+### Near-Term Product Roadmap
+
+**P0 -- Trust + Continuity**
+- Deterministic resume with metadata-rich session list and picker
+- Stronger session previews, titles, timestamps, and active-branch visibility
+- Replace placeholder token-cost math with provider-aware pricing or remove cost until correct
+- Make errors, retries, and rate limits read like product surfaces instead of raw failures
+
+**P1 -- Terminal UX**
+- Replace bare readline input with a retained composer
+- Add multiline drafting, slash-command completion, shell/path completion, and input history
+- Support queueing follow-ups, interrupting after tool completion, and cleaner abort behavior
+- Improve transcript hierarchy so user, assistant, tools, and status each have distinct visual roles
+
+**P2 -- Advanced Flows**
+- Real branch picker and history navigation instead of exposing raw branch ids
+- Session browser with timestamps, summaries, cwd labels, and quick previews
+- Tool timeline with collapsible detail for long-running commands and verbose output
+- Overlay and side-panel style affordances for `/btw`, `/diff`, and `/context`
+
+**P3 -- Team-Native Execution**
+- Mailbox polling integrated into the live agent loop
+- Task queue surfaced in CLI with ownership and progress
+- Better synthesis/review/pipeline UX and clearer merge/cleanup lifecycle
+- Tighten docs and in-product copy so claims match reality
 
 ---
 
@@ -21,7 +60,7 @@ The name is the brand. `ap` is the CLI. `ap.haus` is the research org. The tool 
 TypeScript monorepo. 5 packages that layer cleanly:
 
 ```
-ap/
+blush/
 ├── packages/
 │   ├── ai/           # @blush/ai    -- Multi-provider LLM abstraction
 │   ├── core/         # @blush/core  -- Agent loop, tools, state
@@ -105,17 +144,17 @@ User message → System prompt assembly → LLM call → Tool execution → Loop
 - JSONL session files with tree structure (id + parentId per entry)
 - Branching within a single file -- navigate to any point and fork
 - Compaction preserves full history, summarizes for context
-- Sessions stored at `~/.ap/sessions/<encoded-cwd>/`
+- Sessions stored at `~/.blush/sessions/<encoded-cwd>/`
 
 **Context assembly (priority order):**
 1. System prompt (base, cached)
-2. `AGENTS.md` / `CLAUDE.md` (global ~/.ap/ + per-directory, hierarchical)
+2. `AGENTS.md` / `CLAUDE.md` (global ~/.blush/ + per-directory, hierarchical)
 3. `SYSTEM.md` override (full replacement)
 4. `APPEND_SYSTEM.md` (append-only)
 5. System reminders (injected mid-conversation, preserves cache)
 6. Skills (loaded on-demand)
 
-**Message queue:**
+**Message queue target:**
 - Enter = steering message (interrupts after current tool call)
 - Alt+Enter = follow-up (queued until full completion)
 - Escape = abort with recovery
@@ -161,16 +200,17 @@ The `blush` command. Sessions, commands, modes.
 
 **Operating modes:**
 1. **Interactive** -- full TUI with streaming
-2. **Print** -- scripting output for pipelines (`ap -p "question"`)
-3. **JSON** -- structured output (`ap --json "question"`)
+2. **Print** -- scripting output for pipelines (`blush -p "question"`)
+3. **JSON** -- structured output (`blush --json "question"`)
 4. **RPC** -- JSONL over stdin/stdout for embedding
 5. **SDK** -- programmatic via `createSession()`
 
 **Session management:**
-- Resume last session by default
-- `blush --new` for fresh session
-- `blush --session <name>` for named sessions
-- Session list with `blush sessions`
+- `blush -r` resumes the most recent saved session
+- `blush --new` starts a fresh session
+- `blush --session <id>` resumes a specific session
+- `blush sessions` lists sessions for the current directory
+- `/resume` switches sessions in-process
 
 ### @blush/team -- Multi-Agent Coordination
 
@@ -197,7 +237,7 @@ The differentiator. Agents are peers, not subagents.
 - Worktree cleanup when agent completes (auto-merge if clean)
 
 **Mailbox system:**
-- File-based message passing (`~/.ap/team/<session>/mailbox/<agent-id>/`)
+- File-based message passing (`~/.blush/team/<session>/mailbox/<agent-id>/`)
 - Structured messages: `{ from, to, type, payload, timestamp }`
 - Types: `request`, `response`, `broadcast`, `status`, `artifact`
 - Agents poll their mailbox between tool calls
@@ -529,8 +569,9 @@ Analyze pending changes for security vulnerabilities...
 - End-to-end testing with real API key
 - Set `NPM_TOKEN` secret in GitHub repo for publish workflow
 - First publish: `git tag v0.1.0 && git push --tags`
+- Product polish pass on session UX, input composer, tool timeline, and team ergonomics
 
 ---
 
 *Last updated: 2026-04-02*
-*Status: All phases complete. 56 tests passing. CI/CD configured. Ready for npm publish once NPM_TOKEN is set.*
+*Status: Core architecture is in place, but product polish is still in progress. Shipping-quality session UX, trusted status surfaces, richer input, and deeper team workflows remain active work.*

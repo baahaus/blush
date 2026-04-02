@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import { afterEach, describe, expect, it } from 'vitest';
 import { isCommand, parseCommand } from './input.js';
 import { themes, setTheme, getTheme, listThemes } from './themes.js';
@@ -124,6 +125,12 @@ describe('symbols', () => {
     expect(result[0]).toContain(sym.boxTL);
     expect(result[result.length - 1]).toContain(sym.boxBR);
     expect(result.length).toBe(4); // top + 2 content + bottom
+  });
+
+  it('box pads colored lines using visible width', () => {
+    const result = box([chalk.red('hello')], 20);
+    const stripAnsi = (text: string) => text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+    expect(stripAnsi(result[1])).toHaveLength(stripAnsi(result[0]).length);
   });
 });
 

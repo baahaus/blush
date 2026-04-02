@@ -41,6 +41,7 @@ describe('CLI argument parsing', () => {
       ['/context', 'context', ''],
       ['/diff', 'diff', ''],
       ['/model claude-sonnet-4-20250514', 'model', 'claude-sonnet-4-20250514'],
+      ['/resume abc123', 'resume', 'abc123'],
       ['/skills', 'skills', ''],
       ['/theme ocean', 'theme', 'ocean'],
       ['/save', 'save', ''],
@@ -83,6 +84,48 @@ describe('CLI version and branding', () => {
     const __dirname = dirname(fileURLToPath(import.meta.url));
     const pkg = JSON.parse(await readFile(join(__dirname, '..', 'package.json'), 'utf-8'));
     expect(pkg.bin).toHaveProperty('blush');
+  });
+});
+
+describe('stream rendering', () => {
+  it('prefixes assistant chunks without adding markers to blank lines', async () => {
+    const { prefixStreamChunk } = await import('./rendering.js');
+
+    expect(prefixStreamChunk('hello', '  ▸ ', true)).toEqual({
+      output: '  ▸ hello',
+      lineStart: false,
+    });
+
+    expect(prefixStreamChunk('\nnext', '  ▸ ', false)).toEqual({
+      output: '\n  ▸ next',
+      lineStart: false,
+    });
+
+    expect(prefixStreamChunk('one\n\ntwo\n', '  ▸ ', true)).toEqual({
+      output: '  ▸ one\n\n  ▸ two\n',
+      lineStart: true,
+    });
+  });
+
+  it('summarizes tool input for compact tool headers', async () => {
+    const { summarizeToolInput } = await import('./rendering.js');
+
+    expect(summarizeToolInput('bash', { command: 'ls -la ~/Desktop' })).toBe('ls -la ~/Desktop');
+    expect(summarizeToolInput('read', { file: '/Users/brandon/Projects/blush/README.md' })).toContain('README.md');
+    expect(summarizeToolInput('web_search', { query: 'latest gpt-5.4 cli ux patterns' })).toContain('gpt-5.4');
+  });
+});
+
+describe('model selection', () => {
+  it('resolves models by number and name', async () => {
+    const { listSelectableModels, resolveModelSelection } = await import('./commands/models.js');
+
+    const models = listSelectableModels();
+    expect(models.length).toBeGreaterThan(3);
+    expect(resolveModelSelection('1')).toBe(models[0].name);
+    expect(resolveModelSelection(models[1].name)).toBe(models[1].name);
+    expect(resolveModelSelection(models[1].name.toUpperCase())).toBe(models[1].name);
+    expect(resolveModelSelection('999')).toBeNull();
   });
 });
 

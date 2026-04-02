@@ -1,6 +1,15 @@
 import chalk from 'chalk';
-import { resolveProvider, type StreamEvent } from '@blush/ai';
-import { createAgent, saveSession, loadSession, listSessions, branchAt, SkillRegistry } from '@blush/core';
+import { basename } from 'node:path';
+import { loadConfig, resolveProvider, updateConfig, type Message, type StreamEvent } from '@blush/ai';
+import {
+  createAgent,
+  saveSession,
+  loadSession,
+  listSessionSummaries,
+  getActiveMessages,
+  SkillRegistry,
+  type SessionSummary,
+} from '@blush/core';
 import {
   createInput,
   isCommand,
@@ -24,7 +33,8 @@ import {
   createSpinner,
   sym,
 } from '@blush/tui';
-import { btw, compact, copy, showContext, showDiff, showSuggestions, handleTeamCommand, showSkills } from './commands/index.js';
+import { btw, compact, copy, showContext, showDiff, showSuggestions, clearSuggestionsBelowCursor, handleTeamCommand, showSkills, resolveModelSelection, showModelSelector } from './commands/index.js';
+import { prefixStreamChunk, summarizeToolInput } from './rendering.js';
 
 const VERSION = '0.1.0';
 
@@ -40,9 +50,36 @@ interface CliOptions {
   newSession?: boolean;
 }
 
+function formatRelativeTime(timestamp: number): string {
+  if (!timestamp) return 'unknown';
+
+  const diffMs = Date.now() - timestamp;
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diffMs < minute) return 'just now';
+  if (diffMs < hour) return `${Math.round(diffMs / minute)}m ago`;
+  if (diffMs < day) return `${Math.round(diffMs / hour)}h ago`;
+  if (diffMs < 7 * day) return `${Math.round(diffMs / day)}d ago`;
+
+  return new Date(timestamp).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function truncateMiddle(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  if (maxLength <= 1) return text.slice(0, maxLength);
+  return text.slice(0, maxLength - 1) + '…';
+}
+
 function parseArgs(args: string[]): CliOptions {
+  const config = loadConfig();
   const opts: CliOptions = {
-    model: process.env.BLUSH_MODEL || 'claude-sonnet-4-20250514',
+    model: process.env.BLUSH_MODEL || config.default_model || 'claude-sonnet-4-20250514',
+    theme: config.default_theme,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -99,16 +136,48 @@ function parseArgs(args: string[]): CliOptions {
 async function listSessionsCommand(): Promise<void> {
   const theme = getTheme();
   const cwd = process.cwd();
-  const sessions = await listSessions(cwd);
+  const sessions = await listSessionSummaries(cwd);
   if (sessions.length === 0) {
     renderDim('  No sessions found for this directory.');
     return;
   }
   renderLine(chalk.hex(theme.text).bold('\n  Sessions\n'));
-  for (const id of sessions) {
-    renderLine(`  ${chalk.hex(theme.dim)(sym.bullet)} ${id}`);
+  for (const session of sessions) {
+    const title = chalk.hex(theme.text)(truncateMiddle(session.title, 64));
+    const meta = chalk.hex(theme.dim)(`${session.entryCount} msgs · ${formatRelativeTime(session.updatedAt)}`);
+    renderLine(`  ${chalk.hex(theme.muted)(sym.bullet)} ${title}`);
+    renderLine(`    ${chalk.hex(theme.text)(session.id)} · ${meta}`);
   }
   renderLine('');
+}
+
+async function showSessionSelector(currentSessionId?: string): Promise<SessionSummary[]> {
+  const theme = getTheme();
+  const cwd = process.cwd();
+  const sessions = await listSessionSummaries(cwd);
+
+  if (sessions.length === 0) {
+    renderDim('  No sessions found for this directory.');
+    return [];
+  }
+
+  renderLine('');
+  renderLine(chalk.hex(theme.text).bold('  Sessions'));
+  renderLine('');
+  for (const [index, session] of sessions.entries()) {
+    const isCurrent = session.id === currentSessionId;
+    const marker = isCurrent
+      ? chalk.hex(theme.prompt)(sym.prompt)
+      : chalk.hex(theme.muted)(String(index + 1).padStart(2, ' '));
+    const current = isCurrent ? chalk.hex(theme.prompt)(' current') : '';
+    const title = truncateMiddle(session.title, 56);
+    const meta = `${session.entryCount} msgs · ${formatRelativeTime(session.updatedAt)}`;
+    renderLine(`  ${marker} ${chalk.hex(theme.text)(title)}${current}`);
+    renderLine(`     ${chalk.hex(theme.text)(session.id)} · ${chalk.hex(theme.dim)(meta)}`);
+  }
+  renderLine('');
+
+  return sessions;
 }
 
 function printHelp(): void {
@@ -151,7 +220,8 @@ function printHelp(): void {
     ['  /branch', 'Fork conversation at current point'],
     ['  /context', 'Show context window usage'],
     ['  /diff', 'Show uncommitted git changes'],
-    ['  /model <name>', 'Switch model'],
+    ['  /model [name|number]', 'Switch model or open selector'],
+    ['  /resume [id|number]', 'Resume another saved session'],
     ['  /team <subcommand>', 'Team management'],
     ['  /skills', 'List installed skills'],
     ['  /theme [name]', 'Set or show color theme'],
@@ -169,6 +239,60 @@ function printHelp(): void {
     ['  Ctrl+C', 'Exit'],
   ]);
   renderLine('');
+}
+
+function getResumePreviewText(message: Message): { role: 'user' | 'assistant'; text: string } | null {
+  if (typeof message.content === 'string') {
+    return message.content.trim()
+      ? { role: message.role, text: message.content.trim() }
+      : null;
+  }
+
+  const text = message.content
+    .filter((block) => block.type === 'text')
+    .map((block) => (block.type === 'text' ? block.text : ''))
+    .join('')
+    .trim();
+
+  if (text) {
+    return { role: message.role, text };
+  }
+
+  if (message.role === 'assistant') {
+    const toolUse = message.content.find((block) => block.type === 'tool_use');
+    if (toolUse && toolUse.type === 'tool_use') {
+      return { role: 'assistant', text: `[used ${toolUse.name}]` };
+    }
+  }
+
+  return null;
+}
+
+function renderResumePreview(messages: Message[]): void {
+  const theme = getTheme();
+  const preview = messages
+    .map(getResumePreviewText)
+    .filter((message): message is { role: 'user' | 'assistant'; text: string } => Boolean(message));
+
+  if (preview.length === 0) return;
+
+  const shown = preview.slice(-8);
+  renderDivider('resume');
+  if (preview.length > shown.length) {
+    renderDim(`  showing last ${shown.length} of ${preview.length} visible messages`);
+  }
+
+  for (const message of shown) {
+    const prefix = message.role === 'user'
+      ? `  ${chalk.hex(theme.prompt)(sym.prompt)} `
+      : `  ${chalk.hex(theme.muted)(sym.input)} `;
+    const content = message.role === 'assistant'
+      ? renderMarkdown(message.text)
+      : message.text;
+    const { output } = prefixStreamChunk(content, prefix, true);
+    renderText(output + '\n');
+    renderText('\n');
+  }
 }
 
 export async function run(): Promise<void> {
@@ -198,22 +322,55 @@ export async function run(): Promise<void> {
   // Handle session resume
   let existingSession: Awaited<ReturnType<typeof loadSession>> | undefined = undefined;
   if (opts.resume || opts.sessionId) {
-    const sessions = await listSessions(cwd);
-    const targetId = opts.sessionId || sessions[sessions.length - 1];
+    const sessions = await listSessionSummaries(cwd);
+    const targetId = opts.sessionId || sessions[0]?.id;
     if (targetId) {
       const loaded = await loadSession(cwd, targetId);
       if (loaded) {
         existingSession = loaded;
-        renderDim(`  Resumed session: ${targetId} (${loaded.entries.length} messages)`);
       } else {
         renderDim(`  Session not found: ${targetId}, starting new`);
       }
     }
   }
+  let activeSession = existingSession;
 
   // Lazy agent creation
   let agent: Awaited<ReturnType<typeof createAgent>> | null = null;
   const spinner = createSpinner();
+  const quietStreamOutput = Boolean(opts.print && opts.json);
+  let responseStarted = false;
+  let assistantLineStart = true;
+
+  function beginResponse(): void {
+    if (quietStreamOutput) return;
+    if (responseStarted) return;
+    renderText('\n');
+    responseStarted = true;
+    assistantLineStart = true;
+  }
+
+  function renderAssistantChunk(text: string): void {
+    const { output, lineStart } = prefixStreamChunk(
+      text,
+      `  ${chalk.hex(getTheme().muted)(sym.input)} `,
+      assistantLineStart,
+    );
+    assistantLineStart = lineStart;
+    if (output) {
+      renderText(output);
+    }
+  }
+
+  async function sendAndRender(a: Awaited<ReturnType<typeof createAgent>>, content: string) {
+    responseStarted = false;
+    assistantLineStart = true;
+    const response = await a.send(content);
+    if (!quietStreamOutput) {
+      renderText('\n');
+    }
+    return response;
+  }
 
   async function getAgent() {
     if (agent) return agent;
@@ -225,30 +382,109 @@ export async function run(): Promise<void> {
       provider,
       model: currentModel,
       cwd,
-      session: existingSession || undefined,
+      session: activeSession || undefined,
       onStream: (event: StreamEvent) => {
+        if (quietStreamOutput && event.type !== 'error') {
+          return;
+        }
+
         switch (event.type) {
-          case 'text':
-            renderText(event.text || '');
+          case 'text': {
+            beginResponse();
+            renderAssistantChunk(event.text || '');
             break;
+          }
           case 'thinking':
-            renderText(chalk.hex(getTheme().dim)(event.text || ''));
+            beginResponse();
+            renderAssistantChunk(chalk.hex(getTheme().dim)(event.text || ''));
             break;
           case 'error':
+            beginResponse();
             renderError(event.error || 'Unknown error');
             break;
         }
       },
-      onToolStart: (name) => {
-        renderText('\n');
-        renderToolStart(name);
+      onToolStart: (name, toolInput) => {
+        if (quietStreamOutput) return;
+        beginResponse();
+        renderToolStart(name, summarizeToolInput(name, toolInput));
       },
       onToolEnd: (name, result) => {
+        if (quietStreamOutput) return;
         renderToolEnd(name, result);
       },
     });
+    activeSession = agent.session;
 
     return agent;
+  }
+
+  async function switchModel(nextModel: string): Promise<void> {
+    const { model: resolvedModel } = resolveProvider(nextModel);
+    if (resolvedModel === currentModel) {
+      renderDim(`  Model unchanged: ${currentModel}`);
+      return;
+    }
+
+    if (agent) {
+      activeSession = agent.session;
+      await saveSession(agent.session);
+    }
+
+    currentModel = resolvedModel;
+    agent = null;
+    await updateConfig({ default_model: currentModel });
+    renderDim(`  Model set to: ${currentModel}`);
+  }
+
+  async function resumeSession(selection?: string): Promise<void> {
+    const currentSessionId = agent?.session.id || activeSession?.id;
+    let sessionId = selection?.trim() || '';
+
+    if (!sessionId) {
+      const sessions = await showSessionSelector(currentSessionId);
+      if (sessions.length === 0) return;
+
+      const selected = await input.getLine('  Select session number or id › ');
+      if (!selected.trim()) {
+        renderDim('  Resume cancelled');
+        return;
+      }
+
+      if (/^\d+$/.test(selected.trim())) {
+        sessionId = sessions[Number(selected.trim()) - 1]?.id || '';
+      } else {
+        sessionId = selected.trim();
+      }
+    }
+
+    if (!sessionId) {
+      renderError('Unknown session selection');
+      return;
+    }
+
+    if (sessionId === currentSessionId) {
+      renderDim(`  Already on session: ${sessionId}`);
+      return;
+    }
+
+    if (agent) {
+      activeSession = agent.session;
+      await saveSession(agent.session);
+    }
+
+    const loaded = await loadSession(cwd, sessionId);
+    if (!loaded) {
+      renderError(`Session not found: ${sessionId}`);
+      return;
+    }
+
+    existingSession = loaded;
+    activeSession = loaded;
+    agent = null;
+
+    renderDim(`  Resumed session: ${sessionId} (${loaded.entries.length} messages)`);
+    renderResumePreview(getActiveMessages(loaded));
   }
 
   // Print mode
@@ -256,6 +492,9 @@ export async function run(): Promise<void> {
     try {
       const a = await getAgent();
       const response = await a.send(opts.print);
+      if (!opts.json) {
+        renderText('\n');
+      }
       if (opts.json) {
         const text = typeof response.content === 'string'
           ? response.content
@@ -268,8 +507,6 @@ export async function run(): Promise<void> {
           usage: a.usage.total,
           session: a.session.id,
         }));
-      } else {
-        renderText('\n');
       }
     } catch (err) {
       renderError((err as Error).message);
@@ -278,7 +515,14 @@ export async function run(): Promise<void> {
   }
 
   // Interactive mode -- show welcome banner
-  renderWelcome(VERSION, currentModel);
+  const projectLabel = basename(cwd) || cwd;
+  const sessionLabel = existingSession
+    ? `${existingSession.entries.length} msgs resumed`
+    : 'new session';
+  renderWelcome(VERSION, currentModel, projectLabel, sessionLabel);
+  if (existingSession) {
+    renderResumePreview(getActiveMessages(existingSession));
+  }
 
   if (skillCount > 0) {
     renderDim(`  ${sym.toolDone} ${skillCount} skill(s) loaded`);
@@ -326,6 +570,7 @@ export async function run(): Promise<void> {
         }
         if (setTheme(args.trim())) {
           const t = getTheme();
+          await updateConfig({ default_theme: t.name });
           renderLine(`\n  ${chalk.hex(t.prompt)(sym.toolDone)} Theme: ${chalk.hex(t.prompt)(t.label)}\n`);
         } else {
           renderError(`Unknown theme: ${args}. Available: ${listThemes().join(', ')}`);
@@ -335,16 +580,35 @@ export async function run(): Promise<void> {
 
       case 'model':
         if (!args) {
-          renderDim(`  Current model: ${currentModel}`);
+          showModelSelector(currentModel);
+          const selected = await input.getLine('  Select model number or name › ');
+          if (!selected.trim()) {
+            renderDim('  Model selection cancelled');
+            return true;
+          }
+
+          const chosenModel = resolveModelSelection(selected) || selected.trim();
+          try {
+            await switchModel(chosenModel);
+          } catch {
+            renderError(`Unknown model: ${selected.trim()}`);
+          }
           return true;
         }
-        currentModel = args.trim();
-        agent = null;
-        renderDim(`  Model set to: ${currentModel}`);
+        try {
+          await switchModel(resolveModelSelection(args.trim()) || args.trim());
+        } catch {
+          renderError(`Unknown model: ${args.trim()}`);
+        }
         return true;
 
       case 'sessions': {
         await listSessionsCommand();
+        return true;
+      }
+
+      case 'resume': {
+        await resumeSession(args);
         return true;
       }
 
@@ -420,14 +684,12 @@ export async function run(): Promise<void> {
             renderDim(`  ${sym.toolDone} Activated skill: ${skill.name}`);
             const a = await getAgent();
             const prompt = args ? `${content}\n\nUser request: ${args}` : content;
-            await a.send(prompt);
-            renderText('\n');
+            await sendAndRender(a, prompt);
           } else {
             renderDim(`  Skill ${skill.name} already active.`);
             if (args) {
               const a = await getAgent();
-              await a.send(args);
-              renderText('\n');
+              await sendAndRender(a, args);
             }
           }
           return true;
@@ -454,6 +716,8 @@ export async function run(): Promise<void> {
     try {
       const line = await input.getLine('');
       const trimmed = line.trim();
+
+      clearSuggestionsBelowCursor(1);
 
       if (!trimmed) continue;
 
@@ -492,23 +756,25 @@ export async function run(): Promise<void> {
       try {
         const a = await getAgent();
 
+        const usageBefore = { ...a.usage.total };
         const startTime = Date.now();
-        await a.send(trimmed);
+        await sendAndRender(a, trimmed);
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-
-        renderText('\n');
 
         // Show status after response
         const total = a.usage.total;
+        const turnInputTokens = total.inputTokens - usageBefore.inputTokens;
+        const turnOutputTokens = total.outputTokens - usageBefore.outputTokens;
         renderStatus({
-          tokens: String(total.inputTokens + total.outputTokens),
-          cost: `$${((total.inputTokens * 0.003 + total.outputTokens * 0.015) / 1000).toFixed(3)}`,
+          model: currentModel,
+          tokens: String(turnInputTokens + turnOutputTokens),
+          cost: `$${((turnInputTokens * 0.003 + turnOutputTokens * 0.015) / 1000).toFixed(3)}`,
           time: `${elapsed}s`,
         });
 
-        // Show prompt suggestions (non-blocking)
+        // Show prompt suggestions before the next prompt is rendered.
         const { provider: p } = resolveProvider(currentModel);
-        showSuggestions(a.getMessages(), p, currentModel).catch(() => {});
+        await showSuggestions(a.getMessages(), p, currentModel);
 
         // Auto-save
         await saveSession(a.session);
