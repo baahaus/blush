@@ -123,7 +123,14 @@ export async function loadSession(cwd: string, sessionId: string): Promise<Sessi
     .trim()
     .split('\n')
     .filter(Boolean)
-    .map((line) => JSON.parse(line));
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    })
+    .filter((entry): entry is SessionEntry => entry !== null);
 
   const lastEntry = entries[entries.length - 1];
 

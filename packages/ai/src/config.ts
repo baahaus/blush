@@ -24,7 +24,8 @@ export function loadConfig(): ApConfig {
       cached = JSON.parse(readFileSync(BLUSH_CONFIG_PATH, 'utf-8'));
       return cached!;
     } catch {
-      // ignore malformed config
+      console.error('Warning: ~/.blush/config.json is malformed, using defaults');
+      return {};
     }
   }
 

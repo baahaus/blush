@@ -1,6 +1,7 @@
 import type { Provider, Message } from '@blush/ai';
 import { addEntry, type Session } from '@blush/core';
-import { renderDim, renderError } from '@blush/tui';
+import { renderDim, renderLine, renderError, getTheme, sym } from '@blush/tui';
+import chalk from 'chalk';
 
 /**
  * /compact [focus] -- Compress conversation with optional focus instructions.
@@ -54,10 +55,11 @@ export async function compact(
     content: `[Conversation compacted. Summary of ${messages.length} messages]\n\n${summaryText}\n\n---\nContinue from here.`,
   };
 
-  // Reset session to just the summary
-  session.entries = [];
-  session.currentBranch = '';
+  // Branch instead of destroying -- old messages stay in JSONL
+  const branchId = `compact-${Date.now().toString(36)}`;
+  session.currentBranch = branchId;
   addEntry(session, summaryMessage);
 
-  renderDim(`  Compacted ${messages.length} messages into summary.`);
+  const theme = getTheme();
+  renderLine(`  ${chalk.hex(theme.success)(sym.toolDone)} ${chalk.hex(theme.dim)(`${messages.length} messages`)} ${chalk.hex(theme.muted)(sym.arrow)} ${chalk.hex(theme.dim)('summary')}`);
 }

@@ -11,7 +11,7 @@ const selectableModels: SelectableModel[] = [
   { name: 'gpt-5.4-mini', provider: 'Codex' },
   { name: 'claude-sonnet-4-6-20250610', provider: 'Anthropic' },
   { name: 'claude-sonnet-4-20250514', provider: 'Anthropic' },
-  { name: 'claude-opus-4-6-20250610', provider: 'Anthropic' },
+  { name: 'claude-opus-4-6', provider: 'Anthropic' },
   { name: 'claude-haiku-4-5-20251001', provider: 'Anthropic' },
   { name: 'gpt-4o', provider: 'OpenAI' },
   { name: 'gpt-4o-mini', provider: 'OpenAI' },
@@ -51,26 +51,29 @@ export function showModelSelector(currentModel: string): void {
   const theme = getTheme();
 
   renderLine('');
-  renderLine(chalk.hex(theme.text).bold('  Models'));
+  renderLine(`  ${chalk.hex(theme.text).bold('MODELS')}`);
   renderLine('');
 
   let previousProvider = '';
   for (const [index, model] of selectableModels.entries()) {
     if (model.provider !== previousProvider) {
       if (previousProvider) renderLine('');
-      renderLine(`  ${chalk.hex(theme.muted)(model.provider.toUpperCase())}`);
+      renderLine(`  ${chalk.hex(theme.accent).bold(model.provider)}`);
       previousProvider = model.provider;
     }
 
     const isCurrent = model.name === currentModel;
     const marker = isCurrent
-      ? chalk.hex(theme.prompt)(sym.prompt)
+      ? chalk.hex(theme.prompt).bold(sym.prompt)
       : chalk.hex(theme.muted)(String(index + 1).padStart(2, ' '));
-    const current = isCurrent ? chalk.hex(theme.prompt)(' current') : '';
-    renderLine(`  ${marker} ${chalk.hex(theme.text)(model.name)} ${chalk.hex(theme.dim)(model.provider)}${current}`);
+    const modelLabel = isCurrent
+      ? chalk.hex(theme.prompt).bold(model.name)
+      : chalk.hex(theme.text)(model.name);
+    const tag = isCurrent ? chalk.hex(theme.prompt)(' current') : '';
+    renderLine(`  ${marker} ${modelLabel}${tag}`);
   }
 
   renderLine('');
-  renderLine(`  ${chalk.hex(theme.muted)('Tip: type any explicit model string or provider:model value.')}`);
+  renderLine(`  ${chalk.hex(theme.muted)('or type any model string directly')}`);
   renderLine('');
 }

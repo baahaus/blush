@@ -5,6 +5,7 @@ import { classifyBashCommand } from '@blush/ai';
 export const BashParams = Type.Object({
   command: Type.String({ description: 'The shell command to execute' }),
   timeout: Type.Optional(Type.Number({ description: 'Timeout in milliseconds', default: 120000 })),
+  cwd: Type.Optional(Type.String({ description: 'Working directory for the command' })),
 });
 
 export type BashParams = Static<typeof BashParams>;
@@ -17,7 +18,7 @@ export function enableBashSafetyCheck(enabled: boolean): void {
 }
 
 export async function bash(params: BashParams): Promise<string> {
-  const { command, timeout = 120000 } = params;
+  const { command, timeout = 120000, cwd } = params;
 
   // Optional sidecar safety check
   if (safetyCheckEnabled) {
@@ -33,7 +34,7 @@ export async function bash(params: BashParams): Promise<string> {
 
   return new Promise((resolve) => {
     const proc = spawn('bash', ['-c', command], {
-      cwd: process.cwd(),
+      cwd: cwd || process.cwd(),
       timeout,
       env: { ...process.env },
     });

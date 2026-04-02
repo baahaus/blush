@@ -10,6 +10,7 @@ import type {
 } from '../types.js';
 import { getApiKey } from '../config.js';
 import { getAnthropicAuth } from '../auth.js';
+import { DEFAULT_ANTHROPIC_MODEL } from '../defaults.js';
 
 const MAX_INTERACTIVE_RETRY_WAIT_MS = 10_000;
 
@@ -131,17 +132,23 @@ export function createAnthropicProvider(config: ProviderConfig): Provider {
   }
 
   async function* stream(request: CompletionRequest): AsyncIterable<StreamEvent> {
+    const useThinking = request.thinking === true;
     const body: Record<string, unknown> = {
-      model: request.model || config.defaultModel || 'claude-sonnet-4-20250514',
+      model: request.model || config.defaultModel || DEFAULT_ANTHROPIC_MODEL,
       messages: toAnthropicMessages(request.messages),
-      max_tokens: request.maxTokens || 8192,
+      max_tokens: useThinking ? (request.maxTokens || 16384) : (request.maxTokens || 8192),
       stream: true,
     };
+
+    if (useThinking) {
+      body.thinking = { type: 'enabled', budget_tokens: 10000 };
+    }
 
     const sys = formatSystem(request.system);
     if (sys) body.system = sys;
     if (request.tools?.length) body.tools = request.tools;
-    if (request.temperature !== undefined) body.temperature = request.temperature;
+    // Temperature cannot be set when thinking is enabled
+    if (request.temperature !== undefined && !useThinking) body.temperature = request.temperature;
     if (request.stopSequences?.length) body.stop_sequences = request.stopSequences;
 
     const response = await fetchWithRetry(`${baseUrl}/v1/messages${urlSuffix}`, {
@@ -246,16 +253,22 @@ export function createAnthropicProvider(config: ProviderConfig): Provider {
   }
 
   async function complete(request: CompletionRequest): Promise<CompletionResponse> {
+    const useThinking = request.thinking === true;
     const body: Record<string, unknown> = {
-      model: request.model || config.defaultModel || 'claude-sonnet-4-20250514',
+      model: request.model || config.defaultModel || DEFAULT_ANTHROPIC_MODEL,
       messages: toAnthropicMessages(request.messages),
-      max_tokens: request.maxTokens || 8192,
+      max_tokens: useThinking ? (request.maxTokens || 16384) : (request.maxTokens || 8192),
     };
+
+    if (useThinking) {
+      body.thinking = { type: 'enabled', budget_tokens: 10000 };
+    }
 
     const sys = formatSystem(request.system);
     if (sys) body.system = sys;
     if (request.tools?.length) body.tools = request.tools;
-    if (request.temperature !== undefined) body.temperature = request.temperature;
+    // Temperature cannot be set when thinking is enabled
+    if (request.temperature !== undefined && !useThinking) body.temperature = request.temperature;
     if (request.stopSequences?.length) body.stop_sequences = request.stopSequences;
 
     const response = await fetchWithRetry(`${baseUrl}/v1/messages${urlSuffix}`, {
@@ -314,7 +327,7 @@ export function createAnthropicProvider(config: ProviderConfig): Provider {
     stream,
     complete,
     models: () => [
-      'claude-opus-4-6-20250610',
+      'claude-opus-4-6',
       'claude-sonnet-4-6-20250610',
       'claude-sonnet-4-20250514',
       'claude-haiku-4-5-20251001',

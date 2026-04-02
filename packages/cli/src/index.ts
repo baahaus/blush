@@ -23,7 +23,9 @@ import {
   renderDim,
   renderWelcome,
   renderGoodbye,
+  renderThemeSwatch,
   renderStatus,
+  createSpinner,
   renderDivider,
   renderHelp,
   setTheme,
@@ -59,6 +61,7 @@ const SLASH_COMMANDS = [
   '/branch',
   '/context',
   '/diff',
+  '/effort',
   '/model',
   '/resume',
   '/team',
@@ -176,15 +179,16 @@ async function listSessionsCommand(): Promise<void> {
   const cwd = process.cwd();
   const sessions = await listSessionSummaries(cwd);
   if (sessions.length === 0) {
-    renderDim('  No sessions found for this directory.');
+    renderDim('  No sessions yet. Start one and it\'ll show up here.');
     return;
   }
-  renderLine(chalk.hex(theme.text).bold('\n  Sessions\n'));
+  renderLine(`\n  ${chalk.hex(theme.text).bold('SESSIONS')}\n`);
   for (const session of sessions) {
-    const title = chalk.hex(theme.text)(truncateMiddle(session.title, 64));
-    const meta = chalk.hex(theme.dim)(`${session.entryCount} msgs · ${formatRelativeTime(session.updatedAt)}`);
-    renderLine(`  ${chalk.hex(theme.muted)(sym.bullet)} ${title}`);
-    renderLine(`    ${chalk.hex(theme.text)(session.id)} · ${meta}`);
+    const title = chalk.hex(theme.text).bold(truncateMiddle(session.title, 64));
+    const meta = chalk.hex(theme.muted)(`${session.entryCount} msgs ${sym.dot} ${formatRelativeTime(session.updatedAt)}`);
+    renderLine(`  ${title}`);
+    renderLine(`  ${meta}`);
+    renderLine('');
   }
   renderLine('');
 }
@@ -195,23 +199,26 @@ async function showSessionSelector(currentSessionId?: string): Promise<SessionSu
   const sessions = await listSessionSummaries(cwd);
 
   if (sessions.length === 0) {
-    renderDim('  No sessions found for this directory.');
+    renderDim('  No sessions yet. Start one and it\'ll show up here.');
     return [];
   }
 
   renderLine('');
-  renderLine(chalk.hex(theme.text).bold('  Sessions'));
+  renderLine(`  ${chalk.hex(theme.text).bold('SESSIONS')}`);
   renderLine('');
   for (const [index, session] of sessions.entries()) {
     const isCurrent = session.id === currentSessionId;
     const marker = isCurrent
-      ? chalk.hex(theme.prompt)(sym.prompt)
+      ? chalk.hex(theme.prompt).bold(sym.prompt)
       : chalk.hex(theme.muted)(String(index + 1).padStart(2, ' '));
-    const current = isCurrent ? chalk.hex(theme.prompt)(' current') : '';
     const title = truncateMiddle(session.title, 56);
-    const meta = `${session.entryCount} msgs · ${formatRelativeTime(session.updatedAt)}`;
-    renderLine(`  ${marker} ${chalk.hex(theme.text)(title)}${current}`);
-    renderLine(`     ${chalk.hex(theme.text)(session.id)} · ${chalk.hex(theme.dim)(meta)}`);
+    const meta = `${session.entryCount} msgs ${sym.dot} ${formatRelativeTime(session.updatedAt)}`;
+    const titleFmt = isCurrent
+      ? chalk.hex(theme.prompt).bold(title)
+      : chalk.hex(theme.text).bold(title);
+    const tag = isCurrent ? chalk.hex(theme.prompt)(' current') : '';
+    renderLine(`  ${marker} ${titleFmt}${tag}`);
+    renderLine(`     ${chalk.hex(theme.muted)(meta)}`);
   }
   renderLine('');
 
@@ -258,6 +265,7 @@ function printHelp(): void {
     ['  /branch', 'Fork conversation at current point'],
     ['  /context', 'Show context window usage'],
     ['  /diff', 'Show uncommitted git changes'],
+    ['  /effort [on|off]', 'Toggle extended thinking'],
     ['  /model [name|number]', 'Switch model or open selector'],
     ['  /resume [id|number]', 'Resume another saved session'],
     ['  /team <subcommand>', 'Team management'],
@@ -275,6 +283,7 @@ function printHelp(): void {
     ['  Enter', 'Send message'],
     ['  Tab', 'Complete commands, models, sessions, and paths'],
     ['  Tab Tab', 'Show all matching completions'],
+    ['  Escape', 'Interrupt agent while working'],
     ['  !command', 'Run shell command directly'],
     ['  Ctrl+C', 'Exit'],
   ]);
@@ -346,6 +355,7 @@ export async function run(): Promise<void> {
   }
 
   let currentModel = opts.model;
+  let thinking = false;
   const cwd = process.cwd();
 
   // Apply theme
@@ -380,6 +390,11 @@ export async function run(): Promise<void> {
   const quietStreamOutput = Boolean(opts.print && opts.json);
   let responseStarted = false;
   let assistantLineStart = true;
+  let assistantCol = 0;
+  const sessionStartTime = Date.now();
+  let totalToolCalls = 0;
+  const spinner = createSpinner();
+  let abortController: AbortController | null = null;
 
   function beginResponse(): void {
     if (quietStreamOutput) return;
@@ -387,19 +402,22 @@ export async function run(): Promise<void> {
     renderText('\n');
     responseStarted = true;
     assistantLineStart = true;
+    assistantCol = 0;
   }
 
   function renderAssistantChunk(text: string): void {
     const theme = getTheme();
-    const { output, lineStart } = prefixStreamChunk(
+    const { output, lineStart, col } = prefixStreamChunk(
       text,
       assistantPrefix(
         `  ${chalk.hex(theme.border)(sym.boxV)} `,
         `  ${chalk.hex(theme.border)(sym.boxV)} `,
       ),
       assistantLineStart,
+      assistantCol,
     );
     assistantLineStart = lineStart;
+    assistantCol = col;
     if (output) {
       renderText(output);
     }
@@ -408,11 +426,37 @@ export async function run(): Promise<void> {
   async function sendAndRender(a: Awaited<ReturnType<typeof createAgent>>, content: string) {
     responseStarted = false;
     assistantLineStart = true;
-    const response = await a.send(content);
+    assistantCol = 0;
+
+    // Set up abort controller for this message
+    abortController = new AbortController();
+    const { signal } = abortController;
+
+    // Listen for Escape while agent is running
+    const onAbortKey = (_char: string, key: { name?: string }) => {
+      if (key.name === 'escape' && abortController && !signal.aborted) {
+        abortController.abort();
+        spinner.stop();
+        renderText('\n');
+        renderDim('  interrupted');
+      }
+    };
+    process.stdin.on('keypress', onAbortKey);
+
     if (!quietStreamOutput) {
-      renderText('\n');
+      spinner.start('thinking');
     }
-    return response;
+    try {
+      const response = await a.send(content, { signal });
+      if (!quietStreamOutput && !signal.aborted) {
+        renderText('\n');
+      }
+      return response;
+    } finally {
+      spinner.stop();
+      process.stdin.off('keypress', onAbortKey);
+      abortController = null;
+    }
   }
 
   async function getAgent() {
@@ -425,6 +469,7 @@ export async function run(): Promise<void> {
       provider,
       model: currentModel,
       cwd,
+      thinking,
       session: activeSession || undefined,
       onStream: (event: StreamEvent) => {
         if (quietStreamOutput && event.type !== 'error') {
@@ -433,28 +478,44 @@ export async function run(): Promise<void> {
 
         switch (event.type) {
           case 'text': {
+            spinner.stop();
             beginResponse();
             renderAssistantChunk(event.text || '');
             break;
           }
           case 'thinking':
+            spinner.stop();
             beginResponse();
             renderAssistantChunk(chalk.hex(getTheme().dim)(event.text || ''));
             break;
           case 'error':
+            spinner.stop();
             beginResponse();
             renderError(event.error || 'Unknown error');
             break;
         }
       },
       onToolStart: (name, toolInput) => {
+        spinner.stop();
         if (quietStreamOutput) return;
         beginResponse();
+        // Finish current text line before tool output
+        if (!assistantLineStart) {
+          renderText('\n');
+        }
+        assistantLineStart = true;
+        assistantCol = 0;
         renderToolStart(name, summarizeToolInput(name, toolInput));
       },
       onToolEnd: (name, result) => {
+        totalToolCalls++;
         if (quietStreamOutput) return;
         renderToolEnd(name, result);
+        // Reset so next text chunk gets a fresh │ prefix
+        assistantLineStart = true;
+        assistantCol = 0;
+        // Restart spinner while waiting for next LLM response
+        spinner.start('thinking');
       },
     });
     activeSession = agent.session;
@@ -477,7 +538,8 @@ export async function run(): Promise<void> {
     currentModel = resolvedModel;
     agent = null;
     await updateConfig({ default_model: currentModel });
-    renderDim(`  Model set to: ${currentModel}`);
+    const theme = getTheme();
+    renderLine(`  ${chalk.hex(theme.accent)(sym.arrow)} ${chalk.hex(theme.text).bold(currentModel)}`);
   }
 
   async function resumeSession(selection?: string): Promise<void> {
@@ -490,7 +552,7 @@ export async function run(): Promise<void> {
 
       const selected = await input.getLine('  Select session number or id › ');
       if (!selected.trim()) {
-        renderDim('  Resume cancelled');
+        renderDim('  cancelled');
         return;
       }
 
@@ -526,7 +588,7 @@ export async function run(): Promise<void> {
     activeSession = loaded;
     agent = null;
 
-    renderDim(`  Resumed session: ${sessionId} (${loaded.entries.length} messages)`);
+    renderLine(`  ${chalk.hex(getTheme().accent)(sym.session)} ${chalk.hex(getTheme().dim)('resumed')}  ${chalk.hex(getTheme().muted)(`${loaded.entries.length} messages`)}`);
     renderResumePreview(getActiveMessages(loaded));
   }
 
@@ -569,7 +631,7 @@ export async function run(): Promise<void> {
   }
 
   if (skillCount > 0) {
-    renderDim(`  ${sym.toolDone} ${skillCount} skill(s) loaded`);
+    renderDim(`  ${skillCount} skill${skillCount > 1 ? 's' : ''} ready`);
   }
 
   const input = createInput({
@@ -610,12 +672,35 @@ export async function run(): Promise<void> {
   });
   const theme = getTheme();
 
+  function getSessionStats() {
+    const total = agent?.usage.total;
+    return {
+      duration: Date.now() - sessionStartTime,
+      messages: activeSession?.entries.length || 0,
+      toolCalls: totalToolCalls,
+      tokens: total ? total.inputTokens + total.outputTokens : 0,
+    };
+  }
+
+  // Clean up spinner on any exit path
+  process.on('exit', () => spinner.stop());
+  process.on('uncaughtException', (err) => {
+    spinner.stop();
+    renderError(err.message);
+    process.exit(1);
+  });
+  process.on('unhandledRejection', (err) => {
+    spinner.stop();
+    renderError(err instanceof Error ? err.message : String(err));
+  });
+
   // Graceful shutdown
   process.on('SIGINT', async () => {
+    spinner.stop();
     renderText('\n');
     if (agent) {
       await saveSession(agent.session);
-      renderGoodbye(agent.session.id);
+      renderGoodbye(agent.session.id, getSessionStats());
     } else {
       renderGoodbye();
     }
@@ -632,18 +717,51 @@ export async function run(): Promise<void> {
         showDiff();
         return true;
 
+      case 'effort': {
+        const theme = getTheme();
+        if (args === 'on' || args === 'high') {
+          thinking = true;
+        } else if (args === 'off' || args === 'low') {
+          thinking = false;
+        } else {
+          thinking = !thinking;
+        }
+        // Recreate agent on next send to pick up new thinking state
+        if (agent) {
+          activeSession = agent.session;
+          await saveSession(agent.session);
+          agent = null;
+        }
+        const label = thinking ? 'extended thinking on' : 'extended thinking off';
+        const color = thinking ? theme.accent : theme.dim;
+        renderLine(`  ${chalk.hex(theme.accent)(sym.arrow)} ${chalk.hex(color)(label)}`);
+        return true;
+      }
+
       case 'skills':
         showSkills(skills);
         return true;
 
       case 'theme': {
         if (!args) {
+          const { themes } = await import('@blush/tui');
           const current = getTheme();
-          const available = listThemes();
           renderLine('');
-          for (const themeName of available) {
-            const marker = themeName === current.name ? chalk.hex(current.prompt)(sym.prompt) : ' ';
-            renderLine(`  ${marker} ${chalk.hex(current.dim)(themeName)}`);
+          renderLine(`  ${chalk.hex(current.text).bold('THEMES')}`);
+          renderLine('');
+          for (const [themeName, t] of Object.entries(themes)) {
+            const isCurrent = themeName === current.name;
+            const swatch = [t.prompt, t.accent, t.text, t.success].map(
+              (c) => chalk.hex(c)('\u2588'),
+            ).join('');
+            const marker = isCurrent
+              ? chalk.hex(t.prompt).bold(sym.prompt)
+              : ' ';
+            const label = isCurrent
+              ? chalk.hex(t.prompt).bold(t.label)
+              : chalk.hex(current.dim)(t.label);
+            const tag = isCurrent ? chalk.hex(t.prompt)(' current') : '';
+            renderLine(`  ${marker} ${swatch}  ${label}${tag}`);
           }
           renderLine('');
           return true;
@@ -651,7 +769,9 @@ export async function run(): Promise<void> {
         if (setTheme(args.trim())) {
           const t = getTheme();
           await updateConfig({ default_theme: t.name });
-          renderLine(`\n  ${chalk.hex(t.prompt)(sym.toolDone)} Theme: ${chalk.hex(t.prompt)(t.label)}\n`);
+          renderLine(`\n  ${chalk.hex(t.prompt)(sym.toolDone)} Theme: ${chalk.hex(t.prompt)(t.label)}`);
+          await renderThemeSwatch();
+          renderLine('');
         } else {
           renderError(`Unknown theme: ${args}. Available: ${listThemes().join(', ')}`);
         }
@@ -663,7 +783,7 @@ export async function run(): Promise<void> {
           showModelSelector(currentModel);
           const selected = await input.getLine('  Select model number or name › ');
           if (!selected.trim()) {
-            renderDim('  Model selection cancelled');
+            renderDim('  cancelled');
             return true;
           }
 
@@ -700,7 +820,7 @@ export async function run(): Promise<void> {
       case 'quit':
         if (agent) {
           await saveSession(agent.session);
-          renderGoodbye(agent.session.id);
+          renderGoodbye(agent.session.id, getSessionStats());
         } else {
           renderGoodbye();
         }
@@ -734,7 +854,7 @@ export async function run(): Promise<void> {
 
       case 'branch': {
         const a = await getAgent();
-        renderDim(`  Conversation branched at: ${a.session.currentBranch}`);
+        renderLine(`  ${chalk.hex(getTheme().accent)(sym.branch)} ${chalk.hex(getTheme().dim)('forked')}  ${chalk.hex(getTheme().muted)(a.session.currentBranch)}`);
         return true;
       }
 
@@ -747,7 +867,7 @@ export async function run(): Promise<void> {
       case 'save': {
         const a = await getAgent();
         await saveSession(a.session);
-        renderDim(`  Session saved: ${a.session.id}`);
+        renderLine(`  ${chalk.hex(getTheme().success)(sym.toolDone)} ${chalk.hex(getTheme().muted)('saved')}`);
         return true;
       }
 
@@ -762,17 +882,28 @@ export async function run(): Promise<void> {
         if (skill) {
           const content = skills.activate(skill.name);
           if (content) {
-            renderDim(`  ${sym.toolDone} Activated skill: ${skill.name}`);
+            renderLine(`  ${chalk.hex(getTheme().accent)(sym.sparkle)} ${chalk.hex(getTheme().text).bold(skill.name)}`);
             const a = await getAgent();
             const prompt = args ? `${content}\n\nUser request: ${args}` : content;
             await sendAndRender(a, prompt);
           } else {
-            renderDim(`  Skill ${skill.name} already active.`);
+            renderDim(`  ${skill.name} already active`);
             if (args) {
               const a = await getAgent();
               await sendAndRender(a, args);
             }
           }
+          return true;
+        }
+
+        // Easter eggs
+        if (name === 'coffee') {
+          const t = getTheme();
+          renderLine('');
+          renderLine(`  ${chalk.hex(t.accent)('\u2615')} ${chalk.hex(t.dim)('brewing...')}`);
+          await new Promise((r) => setTimeout(r, 800));
+          renderLine(`  ${chalk.hex(t.text).bold('here you go.')}`);
+          renderLine('');
           return true;
         }
 
@@ -855,8 +986,7 @@ export async function run(): Promise<void> {
         const turnOutputTokens = total.outputTokens - usageBefore.outputTokens;
         renderStatus({
           model: currentModel,
-          tokens: String(turnInputTokens + turnOutputTokens),
-          cost: `$${((turnInputTokens * 0.003 + turnOutputTokens * 0.015) / 1000).toFixed(3)}`,
+          tokens: `~${((turnInputTokens + turnOutputTokens) / 1000).toFixed(1)}k`,
           time: `${elapsed}s`,
         });
 

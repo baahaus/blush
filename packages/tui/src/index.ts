@@ -18,6 +18,7 @@ export {
   renderPrompt,
   renderWelcome,
   renderGoodbye,
+  renderThemeSwatch,
   clearLine,
   deleteLine,
   moveCursorUp,
@@ -64,3 +65,11 @@ export {
   createSpinner,
   type Spinner,
 } from './spinner.js';
+
+export {
+  pause,
+  prefersReducedMotion,
+  typeOut,
+  staggerLines,
+  drawRule,
+} from './motion.js';

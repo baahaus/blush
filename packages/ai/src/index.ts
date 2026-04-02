@@ -27,6 +27,12 @@ export {
   generateSessionTitle,
 } from './sidecar.js';
 export {
+  DEFAULT_ANTHROPIC_MODEL,
+  DEFAULT_OPENAI_MODEL,
+  DEFAULT_CODEX_MODEL,
+  DEFAULT_SIDECAR_MODEL,
+} from './defaults.js';
+export {
   initCompression,
   compress,
   compressToolOutput,

@@ -1,34 +1,68 @@
+const ansiPattern = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+
+function visibleLength(str: string): number {
+  return str.replace(ansiPattern, '').length;
+}
+
 export function prefixStreamChunk(
   text: string,
   prefix: string | { first: string; continuation?: string },
   lineStart = true,
-): { output: string; lineStart: boolean } {
+  col = 0,
+): { output: string; lineStart: boolean; col: number } {
   let output = '';
   let atLineStart = lineStart;
   let usedChunkPrefix = false;
-  const parts = text.split('\n');
+  let currentCol = col;
+  const columns = process.stdout.columns || 80;
+
   const firstPrefix = typeof prefix === 'string' ? prefix : prefix.first;
   const continuationPrefix = typeof prefix === 'string' ? prefix : (prefix.continuation || prefix.first);
+  const prefixWidth = visibleLength(continuationPrefix);
 
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i];
+  let i = 0;
+  while (i < text.length) {
+    const char = text[i];
 
-    if (part.length > 0) {
-      if (atLineStart) {
-        output += !usedChunkPrefix ? firstPrefix : continuationPrefix;
-        usedChunkPrefix = true;
-        atLineStart = false;
-      }
-      output += part;
-    }
-
-    if (i < parts.length - 1) {
+    // Handle explicit newlines
+    if (char === '\n') {
       output += '\n';
       atLineStart = true;
+      currentCol = 0;
+      i++;
+      continue;
     }
+
+    // Emit prefix at line start
+    if (atLineStart) {
+      output += !usedChunkPrefix ? firstPrefix : continuationPrefix;
+      usedChunkPrefix = true;
+      atLineStart = false;
+      currentCol = prefixWidth;
+    }
+
+    // Pass through ANSI escape sequences without counting width
+    if (char === '\x1B') {
+      const match = text.slice(i).match(/^\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/);
+      if (match) {
+        output += match[0];
+        i += match[0].length;
+        continue;
+      }
+    }
+
+    // Soft-wrap before exceeding terminal width
+    if (currentCol >= columns) {
+      output += '\n' + continuationPrefix;
+      currentCol = prefixWidth;
+    }
+
+    output += char;
+    currentCol++;
+    i++;
   }
 
-  return { output, lineStart: atLineStart };
+  return { output, lineStart: atLineStart, col: currentCol };
 }
 
 export function assistantPrefix(prefixLabel: string, continuationPrefix: string): {
@@ -52,8 +86,8 @@ export function summarizeToolInput(name: string, input: Record<string, unknown>)
     return truncateSingleLine(input.command);
   }
 
-  if ((name === 'read' || name === 'write' || name === 'edit') && typeof input.file === 'string') {
-    return truncateSingleLine(input.file, 48);
+  if ((name === 'read' || name === 'write' || name === 'edit') && typeof input.file_path === 'string') {
+    return truncateSingleLine(input.file_path, 48);
   }
 
   if (name === 'grep' && typeof input.pattern === 'string') {

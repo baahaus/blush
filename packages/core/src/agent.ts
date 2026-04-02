@@ -26,6 +26,7 @@ export interface AgentConfig {
   tools?: CoreTool[];
   extensions?: ExtensionManager;
   session?: Session; // Pass existing session for resume
+  thinking?: boolean;
   onStream?: (event: StreamEvent) => void;
   onToolStart?: (name: string, input: Record<string, unknown>) => void;
   onToolEnd?: (name: string, result: string) => void;
@@ -35,7 +36,7 @@ export interface Agent {
   session: Session;
   usage: UsageTracker;
   extensions: ExtensionManager;
-  send(content: string): Promise<Message>;
+  send(content: string, options?: { signal?: AbortSignal }): Promise<Message>;
   getMessages(): Message[];
 }
 
@@ -70,11 +71,12 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
   }
   const maxToolRounds = 24;
 
-  async function runToolCalls(content: ContentBlock[]): Promise<Message> {
+  async function runToolCalls(content: ContentBlock[], signal?: AbortSignal): Promise<Message> {
     const toolUses = content.filter((b): b is ToolUseContent => b.type === 'tool_use');
     const results: ContentBlock[] = [];
 
     for (const toolUse of toolUses) {
+      if (signal?.aborted) break;
       onToolStart?.(toolUse.name, toolUse.input);
 
       // Fire pre-tool event
@@ -111,7 +113,8 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
     return { role: 'user', content: results };
   }
 
-  async function send(content: string): Promise<Message> {
+  async function send(content: string, options?: { signal?: AbortSignal }): Promise<Message> {
+    const signal = options?.signal;
     // Add user message to session
     const userMessage: Message = { role: 'user', content };
     addEntry(session, userMessage);
@@ -121,6 +124,11 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
 
     // Agent loop: send -> tool calls -> send results -> repeat
     while (true) {
+      if (signal?.aborted) {
+        await saveSession(session);
+        return { role: 'assistant', content: [{ type: 'text', text: '' }] };
+      }
+
       const messages = getActiveMessages(session);
 
       const request: CompletionRequest = {
@@ -128,7 +136,8 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
         messages,
         system: systemPrompt,
         tools: toolDefs,
-        maxTokens: 8192,
+        maxTokens: config.thinking ? 16384 : 8192,
+        thinking: config.thinking,
       };
 
       let response: CompletionResponse;
@@ -144,6 +153,7 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
         const pendingToolUses: Map<string, { id: string; name: string; input: string; callId?: string }> = new Map();
 
         for await (const event of provider.stream(request)) {
+          if (signal?.aborted) break;
           onStream(event);
 
           switch (event.type) {
@@ -236,7 +246,7 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
         throw new Error(`Detected repeated tool loop: ${toolSignature}`);
       }
 
-      const toolResultMessage = await runToolCalls(blocks);
+      const toolResultMessage = await runToolCalls(blocks, signal);
       addEntry(session, toolResultMessage);
 
       // Continue the loop for the next LLM turn

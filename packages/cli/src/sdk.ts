@@ -1,5 +1,5 @@
 /**
- * SDK Mode -- Programmatic API for embedding AP in other tools.
+ * SDK Mode -- Programmatic API for embedding Blush in other tools.
  *
  * Usage:
  *   import { createBlushSession } from '@blush/cli/sdk';

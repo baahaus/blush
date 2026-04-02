@@ -26,16 +26,16 @@ export const themes: Record<string, Theme> = {
   blush: {
     name: 'blush',
     label: 'Blush',
-    prompt: '#E8786F',     // warm coral -- THE blush color
-    accent: '#D4A574',     // warm gold
-    text: '#E8DDD3',       // cream
-    dim: '#8A7E74',        // warm taupe
-    muted: '#5A524B',      // dark taupe
-    error: '#D9534F',      // warm red
-    success: '#7DB88F',    // sage green
-    warning: '#D4A574',    // amber (shared with accent intentionally)
-    border: '#6B6059',     // warm brown
-    highlight: '#E8786F',  // same as prompt for cohesion
+    prompt: '#D0605A',     // warm coral -- THE blush color (deepened for light bg)
+    accent: '#A07038',     // warm gold (deepened for light bg)
+    text: '#4A4238',       // warm brown (dark enough for light backgrounds)
+    dim: '#6E6258',        // warm taupe (deepened for light bg)
+    muted: '#9A8E84',      // soft taupe (subtle on light bg)
+    error: '#C0433F',      // warm red (deepened)
+    success: '#5A9A6C',    // sage green (deepened)
+    warning: '#A07038',    // amber (shared with accent intentionally)
+    border: '#C4B8AC',     // warm tan (lighter border for light bg)
+    highlight: '#D0605A',  // same as prompt for cohesion
   },
 
   mono: {

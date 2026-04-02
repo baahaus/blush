@@ -13,7 +13,7 @@ function ask(rl: ReturnType<typeof createInterface>, question: string): Promise<
 }
 
 export async function init(): Promise<void> {
-  renderLine(chalk.bold('\nAP Setup\n'));
+  renderLine(chalk.bold('\nBlush Setup\n'));
 
   const dirs = [
     BLUSH_DIR,
@@ -66,17 +66,17 @@ export async function init(): Promise<void> {
   // Global AGENTS.md
   const agentsPath = join(BLUSH_DIR, 'AGENTS.md');
   if (!existsSync(agentsPath)) {
-    await writeFile(agentsPath, `# Global AP Instructions
+    await writeFile(agentsPath, `# Global Blush Instructions
 
 # Add instructions here that apply to all projects.
-# These are loaded into every AP session's system prompt.
+# These are loaded into every Blush session's system prompt.
 `);
     renderLine(chalk.green(`  Created ${agentsPath.replace(homedir(), '~')}`));
   }
 
-  renderLine(chalk.bold.green('\n  AP is ready.\n'));
-  renderLine(chalk.dim('  Run `ap` to start a session.'));
-  renderLine(chalk.dim('  Run `ap --help` for all options.'));
+  renderLine(chalk.bold.green('\n  Blush is ready.\n'));
+  renderLine(chalk.dim('  Run `blush` to start a session.'));
+  renderLine(chalk.dim('  Run `blush --help` for all options.'));
   renderLine(chalk.dim('  Add skills to ~/.blush/skills/'));
   renderLine(chalk.dim('  Add extensions to ~/.blush/extensions/\n'));
 }

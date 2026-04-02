@@ -9,6 +9,7 @@ import type {
   TokenUsage,
 } from '../types.js';
 import { getApiKey } from '../config.js';
+import { DEFAULT_OPENAI_MODEL } from '../defaults.js';
 
 function toOpenAIMessages(messages: Message[], system?: string): unknown[] {
   const result: unknown[] = [];
@@ -93,7 +94,7 @@ export function createOpenAIProvider(config: ProviderConfig): Provider {
 
   async function* stream(request: CompletionRequest): AsyncIterable<StreamEvent> {
     const body: Record<string, unknown> = {
-      model: request.model || config.defaultModel || 'gpt-4o',
+      model: request.model || config.defaultModel || DEFAULT_OPENAI_MODEL,
       messages: toOpenAIMessages(request.messages, request.system),
       max_tokens: request.maxTokens || 8192,
       stream: true,
@@ -205,7 +206,7 @@ export function createOpenAIProvider(config: ProviderConfig): Provider {
 
   async function complete(request: CompletionRequest): Promise<CompletionResponse> {
     const body: Record<string, unknown> = {
-      model: request.model || config.defaultModel || 'gpt-4o',
+      model: request.model || config.defaultModel || DEFAULT_OPENAI_MODEL,
       messages: toOpenAIMessages(request.messages, request.system),
       max_tokens: request.maxTokens || 8192,
     };

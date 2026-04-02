@@ -41,6 +41,22 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
+function wouldCreateCycle(tasks: TeamTask[], taskId: string, depId: string): boolean {
+  const visited = new Set<string>();
+  const queue = [depId];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (current === taskId) return true;
+    if (visited.has(current)) continue;
+    visited.add(current);
+    const task = tasks.find((t) => t.id === current);
+    if (task?.dependencies) {
+      queue.push(...task.dependencies);
+    }
+  }
+  return false;
+}
+
 export async function createTask(
   sessionId: string,
   title: string,
@@ -49,9 +65,17 @@ export async function createTask(
   dependencies: string[] = [],
 ): Promise<TeamTask> {
   const tasks = await loadTasks(sessionId);
+  const newId = generateId();
+
+  // Check for circular dependencies
+  for (const depId of dependencies) {
+    if (wouldCreateCycle(tasks, newId, depId)) {
+      throw new Error(`Circular dependency detected: adding dependency ${depId} would create a cycle`);
+    }
+  }
 
   const task: TeamTask = {
-    id: generateId(),
+    id: newId,
     title,
     description,
     status: dependencies.length > 0 ? 'blocked' : 'pending',

@@ -2,19 +2,7 @@ import chalk from 'chalk';
 import { getTheme } from './themes.js';
 import { sym, rule, box } from './symbols.js';
 import { appendTranscript, isLayoutActive, renderLayout, setFooterLines } from './layout.js';
-import { pause } from './motion.js';
-
-function metaLine(label: string, value: string): string {
-  const theme = getTheme();
-  return `  ${chalk.hex(theme.dim)(label)} ${chalk.hex(theme.text)(value)}`;
-}
-
-function inlineMeta(...pairs: Array<[string, string]>): string {
-  const theme = getTheme();
-  return `  ${pairs.map(([label, value]) =>
-    `${chalk.hex(theme.dim)(label)} ${chalk.hex(theme.text)(value)}`,
-  ).join(`  ${chalk.hex(theme.border)(sym.dot)}  `)}`;
-}
+import { pause, typeOut, drawRule, prefersReducedMotion } from './motion.js';
 
 // ─────────────────────────────────────────
 // Core output primitives
@@ -59,14 +47,42 @@ export function renderPrompt(color?: string): void {
 // Welcome banner
 // ─────────────────────────────────────────
 
+function pick<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 function timeGreeting(): string {
   const hour = new Date().getHours();
-  if (hour < 5) return 'burning the midnight oil?';
-  if (hour < 9) return 'early bird gets the merge.';
-  if (hour < 12) return 'good morning.';
-  if (hour < 17) return 'good afternoon.';
-  if (hour < 21) return 'good evening.';
-  return 'night owl mode.';
+  if (hour < 5) return pick([
+    'burning the midnight oil?',
+    'the quiet hours.',
+    'just us and the compiler.',
+  ]);
+  if (hour < 9) return pick([
+    'early bird gets the merge.',
+    'fresh start.',
+    'morning. coffee first?',
+  ]);
+  if (hour < 12) return pick([
+    'good morning.',
+    'let\'s build something.',
+    'morning. what are we working on?',
+  ]);
+  if (hour < 17) return pick([
+    'good afternoon.',
+    'afternoon. where were we?',
+    'let\'s keep the momentum.',
+  ]);
+  if (hour < 21) return pick([
+    'good evening.',
+    'evening session.',
+    'winding down or ramping up?',
+  ]);
+  return pick([
+    'night owl mode.',
+    'late night. ship it?',
+    'the best code happens after dark.',
+  ]);
 }
 
 const farewells = [
@@ -76,6 +92,12 @@ const farewells = [
   'see you soon.',
   'good work today.',
   'take care out there.',
+  'nice work.',
+  'ship it.',
+  'onwards.',
+  'that was a good one.',
+  'rest well.',
+  'back at it whenever you are.',
 ];
 
 export async function renderWelcome(
@@ -89,17 +111,15 @@ export async function renderWelcome(
 
   const lines = [
     '',
-    `  ${chalk.hex(theme.prompt).bold('blush')}  ${chalk.hex(theme.text).bold(timeGreeting())}`,
-    `  ${chalk.hex(theme.dim)(`team cli agent from ap.haus ${sym.dot} v${version}`)}`,
+    `  ${chalk.hex(theme.prompt).bold('blush')}  ${chalk.hex(theme.dim)(timeGreeting())}`,
     '',
     `  ${chalk.hex(theme.border)(rule(Math.max(12, w - 14), sym.thinRule))}`,
     '',
-    metaLine('project', project),
-    inlineMeta(['model', model], ['theme', theme.label]),
-    metaLine('session', session),
+    `  ${chalk.hex(theme.muted)('project')}  ${chalk.hex(theme.text).bold(project)}`,
+    `  ${chalk.hex(theme.muted)('model')}    ${chalk.hex(theme.accent)(model)}`,
+    `  ${chalk.hex(theme.muted)('session')}  ${chalk.hex(theme.dim)(session)}`,
     '',
-    `  ${chalk.hex(theme.accent)('/model')} ${chalk.hex(theme.dim)('switch')}  ${chalk.hex(theme.border)(sym.dot)}  ${chalk.hex(theme.accent)('/theme')} ${chalk.hex(theme.dim)('style')}`,
-    `  ${chalk.hex(theme.accent)('tab')} ${chalk.hex(theme.dim)('complete')}  ${chalk.hex(theme.border)(sym.dot)}  ${chalk.hex(theme.accent)('/help')} ${chalk.hex(theme.dim)('commands')}`,
+    `  ${chalk.hex(theme.dim)(`ap.haus ${sym.dot} v${version}`)}`,
     '',
   ];
 
@@ -108,38 +128,80 @@ export async function renderWelcome(
   for (const [index, line] of bordered.entries()) {
     renderLine(chalk.hex(theme.border)(line));
     if (index < bordered.length - 1) {
-      await pause(index < 2 ? 14 : 10);
+      // First line (top border) gets a longer pause for "frame first" feel
+      await pause(index === 0 ? 30 : 10);
     }
   }
   renderLine('');
 }
 
 /**
- * Graceful goodbye on exit -- warm sign-off.
+ * Graceful goodbye on exit -- warm sign-off with optional session receipt.
  */
-export function renderGoodbye(sessionId?: string): void {
+export function renderGoodbye(sessionId?: string, stats?: {
+  duration?: number;     // ms
+  messages?: number;
+  toolCalls?: number;
+  tokens?: number;
+}): void {
   const theme = getTheme();
-  const farewell = farewells[Math.floor(Math.random() * farewells.length)];
+  const farewell = pick(farewells);
 
-  renderLine('');
-  if (sessionId) {
-    renderLine(`  ${chalk.hex(theme.success)(sym.toolDone)} ${chalk.hex(theme.dim)(`session saved: ${sessionId}`)}`);
+  process.stderr.write('\n');
+  if (stats) {
+    const parts: string[] = [];
+    if (stats.duration) {
+      const mins = Math.floor(stats.duration / 60_000);
+      const secs = Math.floor((stats.duration % 60_000) / 1000);
+      parts.push(mins > 0 ? `${mins}m ${secs}s` : `${secs}s`);
+    }
+    if (stats.messages) parts.push(`${stats.messages} messages`);
+    if (stats.toolCalls) parts.push(`${stats.toolCalls} tools`);
+    if (stats.tokens) parts.push(`${formatTokens(stats.tokens)} tokens`);
+    if (parts.length > 0) {
+      process.stderr.write(`  ${chalk.hex(theme.muted)(parts.join(`  ${sym.dot}  `))}\n`);
+    }
   }
-  renderLine(`  ${chalk.hex(theme.prompt)(sym.prompt)} ${chalk.hex(theme.dim)(farewell)}`);
-  renderLine('');
+  if (sessionId) {
+    process.stderr.write(`  ${chalk.hex(theme.muted)(`saved ${sym.dot} ${sessionId}`)}\n`);
+  }
+  process.stderr.write(`\n  ${chalk.hex(theme.dim)(farewell)}\n\n`);
 }
 
 // ─────────────────────────────────────────
 // Tool execution (progressive reveal)
 // ─────────────────────────────────────────
 
+const toolGlyphs: Record<string, string> = {
+  read: sym.toolRead,
+  write: sym.toolWrite,
+  edit: sym.toolEdit,
+  bash: sym.toolBash,
+  grep: sym.toolGrep,
+  glob: sym.toolGlob,
+  web_fetch: sym.toolWeb,
+  web_search: sym.toolWeb,
+  todo: sym.toolTodo,
+};
+
+const toolTimers = new Map<string, number>();
+
 export function renderToolStart(name: string, detail?: string): void {
   const theme = getTheme();
-  renderLine(`  ${chalk.hex(theme.accent)(name)}  ${chalk.hex(theme.dim)(detail || 'working')}`);
+  const glyph = toolGlyphs[name] || sym.toolRun;
+  toolTimers.set(name, Date.now());
+  // Start is quiet -- just the glyph and detail, no bold name
+  renderLine(`  ${chalk.hex(theme.muted)(glyph)} ${chalk.hex(theme.dim)(name)}  ${chalk.hex(theme.muted)(detail || '')}`);
 }
 
 export function renderToolEnd(name: string, result: string): void {
   const theme = getTheme();
+
+  // Elapsed time
+  const started = toolTimers.get(name);
+  toolTimers.delete(name);
+  const elapsed = started ? Date.now() - started : 0;
+  const timeLabel = elapsed > 500 ? `  ${chalk.hex(theme.muted)(`${(elapsed / 1000).toFixed(1)}s`)}` : '';
 
   // Compute a compact summary
   const lineCount = result.split('\n').length;
@@ -153,12 +215,14 @@ export function renderToolEnd(name: string, result: string): void {
     summary = result.slice(0, 50).trim() || 'done';
   }
 
-  renderLine(`  ${chalk.hex(theme.success)(name)}  ${chalk.hex(theme.dim)(summary)}`);
+  // End is confident -- bold name, accent checkmark, visible summary
+  renderLine(`  ${chalk.hex(theme.accent)(sym.toolDone)} ${chalk.hex(theme.text).bold(name)}  ${chalk.hex(theme.dim)(summary)}${timeLabel}`);
 }
 
 export function renderToolError(name: string, error: string): void {
   const theme = getTheme();
-  renderLine(`  ${chalk.hex(theme.error)(name)}  ${chalk.hex(theme.error)(error)}`);
+  toolTimers.delete(name);
+  renderLine(`  ${chalk.hex(theme.error)(sym.toolFail)} ${chalk.hex(theme.text).bold(name)}  ${chalk.hex(theme.error)(error)}`);
 }
 
 /**
@@ -257,17 +321,17 @@ export function renderMarkdown(text: string): string {
 
 export function renderError(error: string): void {
   const theme = getTheme();
-  renderLine(`  ${chalk.hex(theme.error)('error')}  ${chalk.hex(theme.error)(error)}`);
+  renderLine(`  ${chalk.hex(theme.error).bold(sym.toolFail)} ${chalk.hex(theme.error).bold('error')}  ${chalk.hex(theme.text)(error)}`);
 }
 
 export function renderSuccess(message: string): void {
   const theme = getTheme();
-  renderLine(`  ${chalk.hex(theme.success)('done')}  ${chalk.hex(theme.text)(message)}`);
+  renderLine(`  ${chalk.hex(theme.success)(sym.toolDone)} ${chalk.hex(theme.text).bold(message)}`);
 }
 
 export function renderWarning(message: string): void {
   const theme = getTheme();
-  renderLine(`  ${chalk.hex(theme.warning)('note')}  ${chalk.hex(theme.warning)(message)}`);
+  renderLine(`  ${chalk.hex(theme.warning).bold('!')} ${chalk.hex(theme.warning)(message)}`);
 }
 
 export function renderDim(message: string): void {
@@ -282,8 +346,8 @@ export function renderDim(message: string): void {
 export function renderStatus(parts: Record<string, string>): void {
   const theme = getTheme();
   const items = Object.entries(parts)
-    .map(([k, v]) => `${chalk.hex(theme.dim)(k)} ${chalk.hex(theme.text)(v)}`)
-    .join(` ${chalk.hex(theme.border)(sym.dot)} `);
+    .map(([k, v]) => `${chalk.hex(theme.muted)(k)} ${chalk.hex(theme.dim)(v)}`)
+    .join(`  ${chalk.hex(theme.muted)(sym.dot)}  `);
   if (isLayoutActive()) {
     setFooterLines([
       `  ${chalk.hex(theme.border)(rule(Math.min(process.stdout.columns || 80, 28), sym.thinRule))}`,
@@ -293,6 +357,30 @@ export function renderStatus(parts: Record<string, string>): void {
     return;
   }
   process.stderr.write(`\r\x1b[K  ${items}\n`);
+}
+
+/**
+ * Theme swatch -- shows a preview of key theme colors after switching.
+ */
+export async function renderThemeSwatch(): Promise<void> {
+  const theme = getTheme();
+  const block = '\u2588\u2588'; // two full blocks per color
+  const colors = [theme.prompt, theme.accent, theme.text, theme.success, theme.error, theme.dim];
+
+  if (prefersReducedMotion()) {
+    renderLine(`  ${colors.map((c) => chalk.hex(c)(block)).join(' ')}`);
+    return;
+  }
+
+  process.stderr.write('  ');
+  for (const [i, color] of colors.entries()) {
+    process.stderr.write(chalk.hex(color)(block));
+    if (i < colors.length - 1) {
+      process.stderr.write(' ');
+      await pause(50);
+    }
+  }
+  process.stderr.write('\n');
 }
 
 /**
@@ -312,7 +400,14 @@ export function renderContextMeter(used: number, total: number, width = 30): voi
     + chalk.hex(theme.muted)(sym.progressEmpty.repeat(empty));
 
   const pct = `${Math.round(ratio * 100)}%`;
-  renderLine(`  ${bar} ${chalk.hex(theme.dim)(pct)} ${chalk.hex(theme.muted)(`(${formatTokens(used)}/${formatTokens(total)})`)}`);
+
+  // Contextual note at thresholds
+  const note = ratio > 0.95 ? 'time to /compact'
+    : ratio > 0.85 ? 'getting full'
+    : '';
+  const noteStr = note ? `  ${chalk.hex(ratio > 0.85 ? theme.warning : theme.muted)(note)}` : '';
+
+  renderLine(`  ${bar} ${chalk.hex(theme.dim)(pct)} ${chalk.hex(theme.muted)(`(${formatTokens(used)}/${formatTokens(total)})`)}${noteStr}`);
 }
 
 function formatTokens(n: number): string {
@@ -327,15 +422,11 @@ function formatTokens(n: number): string {
 
 export function renderDivider(label?: string): void {
   const theme = getTheme();
-  const w = Math.min(process.stdout.columns || 80, 60);
 
   if (label) {
-    const leftLen = 3;
-    const rightLen = Math.max(2, w - leftLen - label.length - 4);
-    renderLine(
-      `  ${chalk.hex(theme.border)(sym.boxH.repeat(leftLen))} ${chalk.hex(theme.dim)(label)} ${chalk.hex(theme.border)(sym.boxH.repeat(rightLen))}`,
-    );
+    renderLine(`  ${chalk.hex(theme.text).bold(label.toUpperCase())}`);
   } else {
+    const w = Math.min(process.stdout.columns || 80, 60);
     renderLine(`  ${chalk.hex(theme.muted)(rule(w - 4, sym.thinRule))}`);
   }
 }
@@ -350,7 +441,7 @@ export function renderHelp(commands: Array<[string, string]>): void {
 
   for (const [cmd, desc] of commands) {
     renderLine(
-      `  ${chalk.hex(theme.accent)(cmd.padEnd(maxCmd + 2))} ${chalk.hex(theme.dim)(desc)}`,
+      `  ${chalk.hex(theme.accent).bold(cmd.padEnd(maxCmd + 2))} ${chalk.hex(theme.muted)(desc)}`,
     );
   }
 }

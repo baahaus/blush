@@ -11,15 +11,36 @@ export interface Spinner {
 }
 
 /**
+ * Thinking phrases that rotate during long operations.
+ * Product-specific, not generic AI slop.
+ */
+const thinkingPhrases = [
+  'thinking',
+  'reasoning',
+  'considering',
+  'working through it',
+  'forming a plan',
+  'reading the code',
+  'putting it together',
+];
+
+/**
  * Animated braille spinner with organic timing.
  * Breathes instead of ticking -- slight jitter in frame rate
  * gives the impression of something alive, not mechanical.
+ *
+ * After a few seconds, the label subtly shifts to a new thinking
+ * phrase if no explicit update arrives.
  */
 export function createSpinner(): Spinner {
   let timeout: ReturnType<typeof setTimeout> | null = null;
   let frame = 0;
   let currentLabel = '';
+  let baseLabel = '';
+  let phraseIndex = 0;
   let running = false;
+  let startedAt = 0;
+  let lastPhraseAt = 0;
 
   function nextDelay(): number {
     // Base 80ms with +/- 25ms jitter for organic feel
@@ -30,7 +51,16 @@ export function createSpinner(): Spinner {
     if (!running) return;
     const theme = getTheme();
     const glyph = sym.spinner[frame % sym.spinner.length];
-    const line = `  ${chalk.hex(theme.accent)(glyph)} ${chalk.hex(theme.dim)(currentLabel)}`;
+
+    // Rotate thinking phrases every ~4s if label hasn't been manually updated
+    const elapsed = Date.now() - startedAt;
+    if (elapsed > 3000 && Date.now() - lastPhraseAt > 4000 && baseLabel === currentLabel) {
+      phraseIndex = (phraseIndex + 1) % thinkingPhrases.length;
+      currentLabel = thinkingPhrases[phraseIndex];
+      lastPhraseAt = Date.now();
+    }
+
+    const line = `  ${chalk.hex(theme.accent)(glyph)} ${chalk.hex(theme.muted)(currentLabel)}`;
     process.stderr.write(`\r\x1b[K${line}`);
     frame++;
     timeout = setTimeout(render, nextDelay());
@@ -39,13 +69,19 @@ export function createSpinner(): Spinner {
   function start(label: string) {
     stop();
     currentLabel = label;
+    baseLabel = label;
+    phraseIndex = 0;
     frame = 0;
     running = true;
+    startedAt = Date.now();
+    lastPhraseAt = Date.now();
     render();
   }
 
   function update(label: string) {
     currentLabel = label;
+    baseLabel = label;
+    lastPhraseAt = Date.now();
   }
 
   function succeed(label: string) {

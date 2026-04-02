@@ -1,5 +1,6 @@
 import type { Provider, CompletionResponse } from './types.js';
 import { resolveProvider } from './registry.js';
+import { DEFAULT_SIDECAR_MODEL } from './defaults.js';
 
 /**
  * Sidecar -- a cheap, fast model for lightweight operations.
@@ -28,7 +29,7 @@ function getSidecar(): { provider: Provider; model: string } {
 
   // Try Haiku first, fall back to sonnet
   try {
-    const resolved = resolveProvider('claude-haiku-4-20250414');
+    const resolved = resolveProvider(DEFAULT_SIDECAR_MODEL);
     sidecarProvider = resolved.provider;
     sidecarModel = resolved.model;
     return resolved;
@@ -84,8 +85,8 @@ DANGEROUS: <brief reason>`,
 
     return { safe: true };
   } catch {
-    // If sidecar fails, default to allowing the command
-    return { safe: true };
+    // If sidecar unavailable, default to blocking with explanation
+    return { safe: false, reason: 'Safety classifier unavailable — run without safety check or retry' };
   }
 }
 

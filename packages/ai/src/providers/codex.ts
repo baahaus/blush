@@ -12,6 +12,7 @@ import type {
   TokenUsage,
   Message,
 } from '../types.js';
+import { DEFAULT_CODEX_MODEL } from '../defaults.js';
 
 const CODEX_AUTH_PATH = join(homedir(), '.codex', 'auth.json');
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
@@ -159,7 +160,7 @@ export function createCodexProvider(config: ProviderConfig): Provider {
   async function* stream(request: CompletionRequest): AsyncIterable<StreamEvent> {
     // Codex Responses API: stream-only, store=false, no max_output_tokens/temperature
     const body: Record<string, unknown> = {
-      model: request.model || config.defaultModel || 'gpt-5.4-mini',
+      model: request.model || config.defaultModel || DEFAULT_CODEX_MODEL,
       instructions: request.system || 'You are a helpful assistant.',
       input: toCodexInput(request.messages),
       store: false,

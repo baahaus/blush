@@ -180,7 +180,7 @@ export function clearFooterLines(): void {
 
 export function commitInputToTranscript(line: string): void {
   if (!state.active) return;
-  appendTranscript(`${state.prompt}${line}\n`);
+  appendTranscript(`\n${state.prompt}${line}\n`);
 }
 
 export function setComposerState(

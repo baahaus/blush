@@ -23,6 +23,17 @@ export const sym = {
   arrow: '\u2192',          // → rightwards arrow
   sparkle: '\u2728',        // ✨ sparkles (for delight moments)
 
+  // Per-tool glyphs (personality for the tool timeline)
+  toolRead: '\u25c9',       // ◉ fisheye (reading/inspecting)
+  toolWrite: '\u270e',      // ✎ pencil
+  toolEdit: '\u2732',       // ✲ open asterisk (precise edit)
+  toolBash: '\u276f',       // ❯ terminal chevron
+  toolGrep: '\u2315',       // ⌕ telephone recorder (search)
+  toolGlob: '\u25a3',       // ▣ square with fill (file tree)
+  toolWeb: '\u2609',        // ☉ sun (web/network)
+  toolTodo: '\u2610',       // ☐ ballot box
+  toolTodoDone: '\u2611',   // ☑ ballot box with check
+
   // Box drawing (rounded corners = warmth)
   boxTL: '\u256d',          // ╭
   boxTR: '\u256e',          // ╮

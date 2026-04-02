@@ -21,8 +21,9 @@ export function createWorktree(repoPath: string, agentName: string): Worktree {
     throw new Error(`Not a git repository: ${repoPath}`);
   }
 
-  const branch = `blush-agent/${agentName}-${Date.now().toString(36)}`;
-  const worktreeDir = mkdtempSync(join(tmpdir(), `blush-${agentName}-`));
+  const safeName = agentName.replace(/[^a-zA-Z0-9_-]/g, '-');
+  const branch = `blush-agent/${safeName}-${Date.now().toString(36)}`;
+  const worktreeDir = mkdtempSync(join(tmpdir(), `blush-${safeName}-`));
 
   try {
     // Create worktree with new branch from HEAD

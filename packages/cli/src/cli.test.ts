@@ -91,17 +91,17 @@ describe('stream rendering', () => {
   it('prefixes assistant chunks without adding markers to blank lines', async () => {
     const { prefixStreamChunk } = await import('./rendering.js');
 
-    expect(prefixStreamChunk('hello', '  ▸ ', true)).toEqual({
+    expect(prefixStreamChunk('hello', '  ▸ ', true)).toMatchObject({
       output: '  ▸ hello',
       lineStart: false,
     });
 
-    expect(prefixStreamChunk('\nnext', '  ▸ ', false)).toEqual({
+    expect(prefixStreamChunk('\nnext', '  ▸ ', false)).toMatchObject({
       output: '\n  ▸ next',
       lineStart: false,
     });
 
-    expect(prefixStreamChunk('one\n\ntwo\n', '  ▸ ', true)).toEqual({
+    expect(prefixStreamChunk('one\n\ntwo\n', '  ▸ ', true)).toMatchObject({
       output: '  ▸ one\n\n  ▸ two\n',
       lineStart: true,
     });
@@ -111,7 +111,7 @@ describe('stream rendering', () => {
     const { summarizeToolInput } = await import('./rendering.js');
 
     expect(summarizeToolInput('bash', { command: 'ls -la ~/Desktop' })).toBe('ls -la ~/Desktop');
-    expect(summarizeToolInput('read', { file: '/Users/brandon/Projects/blush/README.md' })).toContain('README.md');
+    expect(summarizeToolInput('read', { file_path: '/Users/brandon/Projects/blush/README.md' })).toContain('README.md');
     expect(summarizeToolInput('web_search', { query: 'latest gpt-5.4 cli ux patterns' })).toContain('gpt-5.4');
   });
 });
