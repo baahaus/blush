@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -20,16 +20,19 @@ export interface Session {
   cwd: string;
   entries: SessionEntry[];
   currentBranch: string; // ID of the latest entry in the active branch
+  title?: string;
 }
 
 export interface SessionSummary {
   id: string;
   cwd: string;
+  cwdLabel: string;
   createdAt: number;
   updatedAt: number;
   entryCount: number;
   activeMessageCount: number;
   title: string;
+  model?: string;
 }
 
 function encodeCwd(cwd: string): string {
@@ -103,13 +106,77 @@ export function branchAt(session: Session, entryId: string): void {
   session.currentBranch = entryId;
 }
 
+export interface BranchInfo {
+  id: string;
+  messageCount: number;
+  lastMessage?: string;
+  isCurrent: boolean;
+}
+
+/**
+ * Walk the entry tree and return info about each branch (leaf path).
+ * A "branch" is a leaf entry -- one that no other entry points to as its parent.
+ * The branch ID is the leaf entry's ID.
+ */
+export function listBranches(session: Session): BranchInfo[] {
+  if (session.entries.length === 0) return [];
+
+  // Find all entry IDs that are referenced as a parentId (i.e. they have children)
+  const parentIds = new Set<string>();
+  for (const entry of session.entries) {
+    if (entry.parentId) {
+      parentIds.add(entry.parentId);
+    }
+  }
+
+  // Leaves are entries that are NOT a parent of any other entry
+  const leaves = session.entries.filter((e) => !parentIds.has(e.id));
+
+  // Build a lookup for walking back
+  const entriesById = new Map(session.entries.map((e) => [e.id, e]));
+
+  return leaves.map((leaf) => {
+    // Walk back from leaf to count messages in this branch
+    let count = 0;
+    let currentId: string | null = leaf.id;
+    while (currentId) {
+      const entry = entriesById.get(currentId);
+      if (!entry) break;
+      count++;
+      currentId = entry.parentId;
+    }
+
+    // Get the last message text for preview
+    const lastMsg = getMessageText(leaf.message);
+    const preview = lastMsg ? lastMsg.slice(0, 80) : undefined;
+
+    return {
+      id: leaf.id,
+      messageCount: count,
+      lastMessage: preview,
+      isCurrent: leaf.id === session.currentBranch,
+    };
+  });
+}
+
+/**
+ * Switch to a different branch by setting currentBranch to the given branch (leaf) ID.
+ * This changes which messages getActiveMessages returns.
+ */
+export function switchBranch(session: Session, branchId: string): void {
+  const entry = session.entries.find((e) => e.id === branchId);
+  if (!entry) throw new Error(`Branch not found: ${branchId}`);
+  session.currentBranch = branchId;
+}
+
 export async function saveSession(session: Session): Promise<void> {
   const dir = sessionDir(session.cwd);
   await mkdir(dir, { recursive: true });
   const path = join(dir, `${session.id}.jsonl`);
 
+  const meta = JSON.stringify({ _meta: true, title: session.title || '' });
   const lines = session.entries.map((e) => JSON.stringify(e)).join('\n');
-  await writeFile(path, lines + '\n', 'utf-8');
+  await writeFile(path, meta + '\n' + lines + '\n', 'utf-8');
 }
 
 export async function loadSession(cwd: string, sessionId: string): Promise<Session | null> {
@@ -119,10 +186,28 @@ export async function loadSession(cwd: string, sessionId: string): Promise<Sessi
   if (!existsSync(path)) return null;
 
   const content = await readFile(path, 'utf-8');
-  const entries: SessionEntry[] = content
+  const lines = content
     .trim()
     .split('\n')
-    .filter(Boolean)
+    .filter(Boolean);
+
+  let title: string | undefined;
+  const entryLines: string[] = [];
+
+  for (const line of lines) {
+    try {
+      const parsed = JSON.parse(line);
+      if (parsed._meta) {
+        title = parsed.title || undefined;
+      } else {
+        entryLines.push(line);
+      }
+    } catch {
+      // skip malformed lines
+    }
+  }
+
+  const entries: SessionEntry[] = entryLines
     .map((line) => {
       try {
         return JSON.parse(line);
@@ -139,6 +224,7 @@ export async function loadSession(cwd: string, sessionId: string): Promise<Sessi
     cwd,
     entries,
     currentBranch: lastEntry?.id || '',
+    title,
   };
 }
 
@@ -160,24 +246,44 @@ function getMessageText(message: Message): string {
     .trim();
 }
 
+function cwdLabel(cwd: string): string {
+  const home = homedir();
+  if (cwd === home) return '~';
+  if (cwd.startsWith(home + '/')) return '~/' + cwd.slice(home.length + 1);
+  return cwd;
+}
+
+function extractModel(session: Session): string | undefined {
+  // Check metadata on entries for model info
+  for (const entry of session.entries) {
+    const model = entry.metadata?.model as string | undefined;
+    if (model) return model;
+  }
+  return undefined;
+}
+
 function summarizeSession(session: Session): SessionSummary {
   const activeMessages = getActiveMessages(session);
   const firstEntry = session.entries[0];
   const lastEntry = session.entries[session.entries.length - 1];
-  const firstUserMessage = activeMessages.find((message) => message.role === 'user');
-  const rawTitle = firstUserMessage ? getMessageText(firstUserMessage) : '';
-  const title = rawTitle
-    ? rawTitle.slice(0, 72)
-    : 'Untitled session';
+
+  let title = session.title || '';
+  if (!title) {
+    const firstUserMessage = activeMessages.find((message) => message.role === 'user');
+    const rawTitle = firstUserMessage ? getMessageText(firstUserMessage) : '';
+    title = rawTitle ? rawTitle.slice(0, 72) : 'Untitled session';
+  }
 
   return {
     id: session.id,
     cwd: session.cwd,
+    cwdLabel: cwdLabel(session.cwd),
     createdAt: firstEntry?.timestamp ?? 0,
     updatedAt: lastEntry?.timestamp ?? 0,
     entryCount: session.entries.length,
     activeMessageCount: activeMessages.length,
     title,
+    model: extractModel(session),
   };
 }
 
@@ -196,4 +302,12 @@ export async function listSessionSummaries(cwd: string): Promise<SessionSummary[
     .filter((session): session is Session => Boolean(session))
     .map((session) => summarizeSession(session))
     .sort((a, b) => b.updatedAt - a.updatedAt || b.createdAt - a.createdAt || a.id.localeCompare(b.id));
+}
+
+export async function deleteSession(cwd: string, sessionId: string): Promise<boolean> {
+  const dir = sessionDir(cwd);
+  const path = join(dir, `${sessionId}.jsonl`);
+  if (!existsSync(path)) return false;
+  await unlink(path);
+  return true;
 }

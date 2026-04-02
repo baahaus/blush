@@ -218,7 +218,7 @@ function idleHelperLine(line: string): string[] {
 
   if (line.trim().length > 0) {
     return [
-      `  ${chalk.hex(theme.muted)('enter sends')} ${chalk.hex(theme.border)(sym.dot)} ${chalk.hex(theme.muted)('up/down history')} ${chalk.hex(theme.border)(sym.dot)} ${chalk.hex(theme.muted)('tab completes')}`,
+      `  ${chalk.hex(theme.muted)('enter sends')} ${chalk.hex(theme.border)(sym.dot)} ${chalk.hex(theme.muted)('opt+enter newline')} ${chalk.hex(theme.border)(sym.dot)} ${chalk.hex(theme.muted)('tab completes')}`,
     ];
   }
 
@@ -227,12 +227,51 @@ function idleHelperLine(line: string): string[] {
   ];
 }
 
+/** Given a flat cursor index into a string with `\n`, return the line index and column. */
+export function cursorToRowCol(text: string, cursor: number): { row: number; col: number } {
+  let row = 0;
+  let col = 0;
+  for (let i = 0; i < cursor && i < text.length; i++) {
+    if (text[i] === '\n') {
+      row++;
+      col = 0;
+    } else {
+      col++;
+    }
+  }
+  return { row, col };
+}
+
+/** Return the flat index of the start of a given line within the text. */
+export function lineStartIndex(text: string, targetRow: number): number {
+  let row = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (row === targetRow) return i;
+    if (text[i] === '\n') row++;
+  }
+  return row === targetRow ? text.length : -1;
+}
+
+/** Return the length (character count) of a given line within the text. */
+export function lineLength(text: string, targetRow: number): number {
+  const lines = text.split('\n');
+  if (targetRow < 0 || targetRow >= lines.length) return 0;
+  return lines[targetRow]!.length;
+}
+
+/** Return the total number of lines in the text. */
+export function lineCount(text: string): number {
+  return text.split('\n').length;
+}
+
 function composerLabel(line: string, completion: CompletionSession | null): string {
   if (completion) {
     return `${completionKind(completion)} ${completion.selected + 1}/${completion.matches.length}`;
   }
+  const numLines = lineCount(line);
   if (line.startsWith('/')) return 'command';
   if (line.startsWith('!')) return 'shell';
+  if (numLines > 1) return `compose (${numLines} lines)`;
   if (line.trim().length > 0) return 'compose';
   return 'ready';
 }
@@ -303,7 +342,13 @@ export function createInput(options: InputOptions = {}): {
       return;
     }
 
-    process.stdout.write('\r\x1b[K' + prompt + line);
+    const inputLines = line.split('\n');
+    process.stdout.write('\r\x1b[K' + prompt + inputLines[0]);
+    for (let i = 1; i < inputLines.length; i++) {
+      // Continuation lines: pad to align with first line's text (after prompt)
+      const pad = ' '.repeat(Math.max(0, prompt.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '').length));
+      process.stdout.write(`\n${pad}${inputLines[i]}`);
+    }
     for (const barLine of barLines) {
       process.stdout.write(`\n${barLine}`);
     }
@@ -435,7 +480,21 @@ export function createInput(options: InputOptions = {}): {
     }
 
     if (key.name === 'return' || key.name === 'enter') {
+      // Option+Enter (meta) or Shift+Enter inserts a newline
+      if (key.meta || key.shift) {
+        insertText('\n');
+        render();
+        return;
+      }
       finalizeLine();
+      return;
+    }
+
+    // Ctrl+J is the Unix newline character -- alternative for terminals
+    // that don't distinguish Shift+Enter from Enter
+    if (key.ctrl && key.name === 'j') {
+      insertText('\n');
+      render();
       return;
     }
 
@@ -455,9 +514,18 @@ export function createInput(options: InputOptions = {}): {
     if (key.name === 'up') {
       if (completion) {
         cycleCompletion(true);
-      } else if (history.length > 0 && historyIndex > 0) {
-        if (historyIndex === history.length) historyDraft = line;
-        setHistoryEntry(historyIndex - 1);
+      } else {
+        const { row, col } = cursorToRowCol(line, cursor);
+        if (row > 0) {
+          // Move cursor up one line, clamping column
+          const prevLen = lineLength(line, row - 1);
+          const prevStart = lineStartIndex(line, row - 1);
+          cursor = prevStart + Math.min(col, prevLen);
+          resetCompletion();
+        } else if (history.length > 0 && historyIndex > 0) {
+          if (historyIndex === history.length) historyDraft = line;
+          setHistoryEntry(historyIndex - 1);
+        }
       }
       render();
       return;
@@ -466,8 +534,18 @@ export function createInput(options: InputOptions = {}): {
     if (key.name === 'down') {
       if (completion) {
         cycleCompletion(false);
-      } else if (historyIndex < history.length) {
-        setHistoryEntry(historyIndex + 1);
+      } else {
+        const { row, col } = cursorToRowCol(line, cursor);
+        const totalLines = lineCount(line);
+        if (row < totalLines - 1) {
+          // Move cursor down one line, clamping column
+          const nextLen = lineLength(line, row + 1);
+          const nextStart = lineStartIndex(line, row + 1);
+          cursor = nextStart + Math.min(col, nextLen);
+          resetCompletion();
+        } else if (historyIndex < history.length) {
+          setHistoryEntry(historyIndex + 1);
+        }
       }
       render();
       return;
@@ -488,14 +566,18 @@ export function createInput(options: InputOptions = {}): {
     }
 
     if (key.name === 'home') {
-      cursor = 0;
+      // Go to start of current line, not entire input
+      const { row } = cursorToRowCol(line, cursor);
+      cursor = lineStartIndex(line, row);
       resetCompletion();
       render();
       return;
     }
 
     if (key.name === 'end') {
-      cursor = line.length;
+      // Go to end of current line, not entire input
+      const { row } = cursorToRowCol(line, cursor);
+      cursor = lineStartIndex(line, row) + lineLength(line, row);
       resetCompletion();
       render();
       return;

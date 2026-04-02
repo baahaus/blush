@@ -40,3 +40,4 @@ export {
   type CompressionResult,
   type CompressionConfig,
 } from './compression.js';
+export { estimateCost } from './pricing.js';

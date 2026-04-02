@@ -5,13 +5,18 @@ export {
   addEntry,
   getActiveMessages,
   branchAt,
+  listBranches,
+  switchBranch,
   saveSession,
   loadSession,
   listSessions,
   listSessionSummaries,
+  deleteSession,
+  sessionDir,
   type Session,
   type SessionEntry,
   type SessionSummary,
+  type BranchInfo,
 } from './session.js';
 export {
   coreTools,

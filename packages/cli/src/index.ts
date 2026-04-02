@@ -1,12 +1,15 @@
 import chalk from 'chalk';
 import { basename } from 'node:path';
-import { loadConfig, resolveProvider, updateConfig, type Message, type StreamEvent } from '@blush/ai';
+import { loadConfig, resolveProvider, updateConfig, estimateCost, generateSessionTitle, type Message, type StreamEvent } from '@blush/ai';
 import {
   createAgent,
   saveSession,
   loadSession,
   listSessionSummaries,
+  deleteSession,
   getActiveMessages,
+  listBranches,
+  switchBranch,
   SkillRegistry,
   type SessionSummary,
 } from '@blush/core';
@@ -64,6 +67,7 @@ const SLASH_COMMANDS = [
   '/effort',
   '/model',
   '/resume',
+  '/sessions',
   '/team',
   '/skills',
   '/theme',
@@ -72,6 +76,8 @@ const SLASH_COMMANDS = [
   '/help',
   '/exit',
 ];
+const BRANCH_SUBCOMMANDS = ['fork'];
+const SESSIONS_SUBCOMMANDS = ['delete'];
 const TEAM_SUBCOMMANDS = ['spawn', 'msg', 'status', 'synthesize', 'review', 'pipeline', 'merge'];
 
 interface CliOptions {
@@ -174,27 +180,54 @@ function parseArgs(args: string[]): CliOptions {
   return opts;
 }
 
-async function listSessionsCommand(): Promise<void> {
+function renderSessionBrowser(sessions: SessionSummary[], currentSessionId?: string): void {
   const theme = getTheme();
+  const cwd = process.cwd();
+  const home = process.env.HOME || '';
+  const cwdDisplay = cwd.startsWith(home) ? '~' + cwd.slice(home.length) : cwd;
+
+  renderLine('');
+  renderLine(`  ${chalk.hex(theme.text).bold('SESSIONS')}  ${chalk.hex(theme.muted)(`(${sessions.length} session${sessions.length === 1 ? '' : 's'} in ${cwdDisplay})`)}`);
+  renderLine('');
+
+  for (const [index, session] of sessions.entries()) {
+    const isCurrent = session.id === currentSessionId;
+    const num = String(index + 1);
+    const marker = isCurrent
+      ? chalk.hex(theme.prompt).bold(`${sym.prompt} ${num}`)
+      : chalk.hex(theme.muted)(`  ${num}`);
+    const title = truncateMiddle(session.title, 44);
+    const titleFmt = isCurrent
+      ? chalk.hex(theme.prompt).bold(title)
+      : chalk.hex(theme.text).bold(title);
+    const tag = isCurrent ? chalk.hex(theme.prompt)('  current') : '';
+
+    // Build metadata line
+    const metaParts: string[] = [];
+    metaParts.push(`${session.entryCount} message${session.entryCount === 1 ? '' : 's'}`);
+    metaParts.push(formatRelativeTime(session.updatedAt));
+    if (session.model) {
+      metaParts.push(session.model);
+    }
+    const meta = metaParts.join(` ${sym.dot} `);
+
+    renderLine(`  ${marker}  ${titleFmt}${tag}`);
+    renderLine(`       ${chalk.hex(theme.muted)(meta)}`);
+    renderLine('');
+  }
+}
+
+async function listSessionsCommand(): Promise<void> {
   const cwd = process.cwd();
   const sessions = await listSessionSummaries(cwd);
   if (sessions.length === 0) {
     renderDim('  No sessions yet. Start one and it\'ll show up here.');
     return;
   }
-  renderLine(`\n  ${chalk.hex(theme.text).bold('SESSIONS')}\n`);
-  for (const session of sessions) {
-    const title = chalk.hex(theme.text).bold(truncateMiddle(session.title, 64));
-    const meta = chalk.hex(theme.muted)(`${session.entryCount} msgs ${sym.dot} ${formatRelativeTime(session.updatedAt)}`);
-    renderLine(`  ${title}`);
-    renderLine(`  ${meta}`);
-    renderLine('');
-  }
-  renderLine('');
+  renderSessionBrowser(sessions);
 }
 
 async function showSessionSelector(currentSessionId?: string): Promise<SessionSummary[]> {
-  const theme = getTheme();
   const cwd = process.cwd();
   const sessions = await listSessionSummaries(cwd);
 
@@ -203,25 +236,7 @@ async function showSessionSelector(currentSessionId?: string): Promise<SessionSu
     return [];
   }
 
-  renderLine('');
-  renderLine(`  ${chalk.hex(theme.text).bold('SESSIONS')}`);
-  renderLine('');
-  for (const [index, session] of sessions.entries()) {
-    const isCurrent = session.id === currentSessionId;
-    const marker = isCurrent
-      ? chalk.hex(theme.prompt).bold(sym.prompt)
-      : chalk.hex(theme.muted)(String(index + 1).padStart(2, ' '));
-    const title = truncateMiddle(session.title, 56);
-    const meta = `${session.entryCount} msgs ${sym.dot} ${formatRelativeTime(session.updatedAt)}`;
-    const titleFmt = isCurrent
-      ? chalk.hex(theme.prompt).bold(title)
-      : chalk.hex(theme.text).bold(title);
-    const tag = isCurrent ? chalk.hex(theme.prompt)(' current') : '';
-    renderLine(`  ${marker} ${titleFmt}${tag}`);
-    renderLine(`     ${chalk.hex(theme.muted)(meta)}`);
-  }
-  renderLine('');
-
+  renderSessionBrowser(sessions, currentSessionId);
   return sessions;
 }
 
@@ -262,12 +277,13 @@ function printHelp(): void {
   renderHelp([
     ['  /btw <question>', 'Ephemeral question (no history)'],
     ['  /compact [focus]', 'Compress conversation'],
-    ['  /branch', 'Fork conversation at current point'],
+    ['  /branch', 'List branches and switch, or /branch fork'],
     ['  /context', 'Show context window usage'],
     ['  /diff', 'Show uncommitted git changes'],
     ['  /effort [on|off]', 'Toggle extended thinking'],
     ['  /model [name|number]', 'Switch model or open selector'],
     ['  /resume [id|number]', 'Resume another saved session'],
+    ['  /sessions [delete]', 'Browse or manage sessions'],
     ['  /team <subcommand>', 'Team management'],
     ['  /skills', 'List installed skills'],
     ['  /theme [name]', 'Set or show color theme'],
@@ -281,8 +297,8 @@ function printHelp(): void {
   renderLine('');
   renderHelp([
     ['  Enter', 'Send message'],
+    ['  Opt+Enter', 'Insert newline (multiline drafting)'],
     ['  Tab', 'Complete commands, models, sessions, and paths'],
-    ['  Tab Tab', 'Show all matching completions'],
     ['  Escape', 'Interrupt agent while working'],
     ['  !command', 'Run shell command directly'],
     ['  Ctrl+C', 'Exit'],
@@ -395,6 +411,7 @@ export async function run(): Promise<void> {
   let totalToolCalls = 0;
   const spinner = createSpinner();
   let abortController: AbortController | null = null;
+  let titleGenerated = Boolean(existingSession?.title);
 
   function beginResponse(): void {
     if (quietStreamOutput) return;
@@ -447,11 +464,24 @@ export async function run(): Promise<void> {
       spinner.start('thinking');
     }
     try {
-      const response = await a.send(content, { signal });
+      // Race the send against the abort signal so Escape returns control immediately
+      const aborted = new Promise<never>((_, reject) => {
+        signal.addEventListener('abort', () => reject(new Error('interrupted')), { once: true });
+      });
+      const response = await Promise.race([
+        a.send(content, { signal }),
+        aborted,
+      ]);
       if (!quietStreamOutput && !signal.aborted) {
         renderText('\n');
       }
       return response;
+    } catch (err) {
+      if ((err as Error).message === 'interrupted') {
+        // Return a synthetic empty response -- partial work is already in the session
+        return { role: 'assistant' as const, content: '' };
+      }
+      throw err;
     } finally {
       spinner.stop();
       process.stdin.off('keypress', onAbortKey);
@@ -660,6 +690,31 @@ export async function run(): Promise<void> {
         );
       }
 
+      if (line === '/branch' || line.startsWith('/branch ')) {
+        const completions: string[] = BRANCH_SUBCOMMANDS.map((sub) => `/branch ${sub}`);
+        // Also add branch IDs if a session is active
+        if (activeSession) {
+          const branches = listBranches(activeSession);
+          for (const branch of branches) {
+            const shortId = branch.id.length > 8 ? branch.id.slice(0, 8) : branch.id;
+            completions.push(`/branch ${shortId}`);
+          }
+        }
+        return matchingCompletions(line, completions);
+      }
+
+      if (line === '/sessions' || line.startsWith('/sessions ')) {
+        const completions: string[] = SESSIONS_SUBCOMMANDS.map((sub) => `/sessions ${sub}`);
+        // Also add session IDs for /sessions delete <id>
+        if (line.startsWith('/sessions delete ')) {
+          const sessions = await listSessionSummaries(cwd);
+          for (const session of sessions) {
+            completions.push(`/sessions delete ${session.id}`);
+          }
+        }
+        return matchingCompletions(line, completions);
+      }
+
       if (line === '/team' || line.startsWith('/team ')) {
         return matchingCompletions(
           line,
@@ -803,7 +858,93 @@ export async function run(): Promise<void> {
         return true;
 
       case 'sessions': {
-        await listSessionsCommand();
+        const currentSessionId = agent?.session.id || activeSession?.id;
+
+        // /sessions delete <id|number>
+        if (args.startsWith('delete')) {
+          const deleteArg = args.slice('delete'.length).trim();
+          const sessions = await listSessionSummaries(cwd);
+          if (sessions.length === 0) {
+            renderDim('  No sessions to delete.');
+            return true;
+          }
+
+          let targetSession: SessionSummary | undefined;
+          if (deleteArg) {
+            if (/^\d+$/.test(deleteArg)) {
+              targetSession = sessions[Number(deleteArg) - 1];
+            } else {
+              targetSession = sessions.find((s) => s.id === deleteArg);
+            }
+          } else {
+            renderSessionBrowser(sessions, currentSessionId);
+            const selected = await input.getLine('  Delete session number or id › ');
+            if (!selected.trim()) {
+              renderDim('  cancelled');
+              return true;
+            }
+            if (/^\d+$/.test(selected.trim())) {
+              targetSession = sessions[Number(selected.trim()) - 1];
+            } else {
+              targetSession = sessions.find((s) => s.id === selected.trim());
+            }
+          }
+
+          if (!targetSession) {
+            renderError('Session not found');
+            return true;
+          }
+
+          if (targetSession.id === currentSessionId) {
+            renderError('Cannot delete the current session');
+            return true;
+          }
+
+          const confirmPrompt = `  Delete "${truncateMiddle(targetSession.title, 40)}"? [y/N] `;
+          const confirm = await input.getLine(confirmPrompt);
+          if (confirm.trim().toLowerCase() !== 'y') {
+            renderDim('  cancelled');
+            return true;
+          }
+
+          const deleted = await deleteSession(cwd, targetSession.id);
+          if (deleted) {
+            renderLine(`  ${chalk.hex(theme.success)(sym.toolDone)} ${chalk.hex(theme.muted)('deleted')}  ${chalk.hex(theme.dim)(targetSession.title)}`);
+          } else {
+            renderError('Failed to delete session');
+          }
+          return true;
+        }
+
+        // /sessions (no args) -- full browser with selection
+        const sessions = await showSessionSelector(currentSessionId);
+        if (sessions.length === 0) return true;
+
+        const selected = await input.getLine('  Select session number or id › ');
+        if (!selected.trim()) {
+          renderDim('  cancelled');
+          return true;
+        }
+
+        let sessionId: string | undefined;
+        if (/^\d+$/.test(selected.trim())) {
+          sessionId = sessions[Number(selected.trim()) - 1]?.id;
+        } else {
+          sessionId = selected.trim();
+        }
+
+        if (!sessionId) {
+          renderError('Unknown session selection');
+          return true;
+        }
+
+        if (sessionId === currentSessionId) {
+          renderDim(`  Already on session: ${sessionId}`);
+          return true;
+        }
+
+        // Resume the selected session (reuse resumeSession logic)
+        await resumeSession(sessionId);
         return true;
       }
 
@@ -854,7 +995,75 @@ export async function run(): Promise<void> {
 
       case 'branch': {
         const a = await getAgent();
-        renderLine(`  ${chalk.hex(getTheme().accent)(sym.branch)} ${chalk.hex(getTheme().dim)('forked')}  ${chalk.hex(getTheme().muted)(a.session.currentBranch)}`);
+
+        // /branch fork -- create a new branch at the current point
+        if (args.trim() === 'fork') {
+          renderLine(`  ${chalk.hex(getTheme().accent)(sym.branch)} ${chalk.hex(getTheme().dim)('forked')}  ${chalk.hex(getTheme().muted)(a.session.currentBranch)}`);
+          return true;
+        }
+
+        // /branch (no args) -- show branch picker
+        const branches = listBranches(a.session);
+
+        if (branches.length <= 1) {
+          renderDim('  no branches yet -- fork with /branch fork');
+          return true;
+        }
+
+        renderLine('');
+        renderLine(`  ${chalk.hex(theme.text).bold('BRANCHES')}`);
+        renderLine('');
+
+        for (const [index, branch] of branches.entries()) {
+          const shortId = branch.id.length > 8 ? branch.id.slice(0, 8) : branch.id;
+          const marker = branch.isCurrent
+            ? chalk.hex(theme.prompt).bold(sym.prompt)
+            : chalk.hex(theme.muted)(String(index + 1).padStart(2, ' '));
+          const label = branch.isCurrent
+            ? chalk.hex(theme.prompt).bold(shortId)
+            : chalk.hex(theme.text).bold(shortId);
+          const count = chalk.hex(theme.muted)(`(${branch.messageCount} messages)`);
+          const preview = branch.lastMessage
+            ? chalk.hex(theme.dim)(`"${truncateMiddle(branch.lastMessage, 48)}"`)
+            : '';
+          const tag = branch.isCurrent ? chalk.hex(theme.prompt)(' current') : '';
+          renderLine(`  ${marker} ${label}  ${count}  ${preview}${tag}`);
+        }
+        renderLine('');
+
+        const selected = await input.getLine('  Select branch number or id › ');
+        if (!selected.trim()) {
+          renderDim('  cancelled');
+          return true;
+        }
+
+        let targetBranchId: string | undefined;
+        const trimmedSelection = selected.trim();
+
+        if (/^\d+$/.test(trimmedSelection)) {
+          const idx = Number(trimmedSelection) - 1;
+          targetBranchId = branches[idx]?.id;
+        } else {
+          // Match by full ID or prefix
+          targetBranchId = branches.find(
+            (b) => b.id === trimmedSelection || b.id.startsWith(trimmedSelection),
+          )?.id;
+        }
+
+        if (!targetBranchId) {
+          renderError(`Unknown branch: ${trimmedSelection}`);
+          return true;
+        }
+
+        const targetBranch = branches.find((b) => b.id === targetBranchId);
+        if (targetBranch?.isCurrent) {
+          renderDim('  already on this branch');
+          return true;
+        }
+
+        switchBranch(a.session, targetBranchId);
+        const shortTarget = targetBranchId.length > 8 ? targetBranchId.slice(0, 8) : targetBranchId;
+        renderLine(`  ${chalk.hex(theme.accent)(sym.branch)} ${chalk.hex(theme.dim)('switched')}  ${chalk.hex(theme.text).bold(shortTarget)}`);
         return true;
       }
 
@@ -984,11 +1193,32 @@ export async function run(): Promise<void> {
         const total = a.usage.total;
         const turnInputTokens = total.inputTokens - usageBefore.inputTokens;
         const turnOutputTokens = total.outputTokens - usageBefore.outputTokens;
-        renderStatus({
+        const turnCacheReadTokens = (total.cacheReadTokens || 0) - (usageBefore.cacheReadTokens || 0);
+        const cost = estimateCost(currentModel, {
+          inputTokens: turnInputTokens,
+          outputTokens: turnOutputTokens,
+          cacheReadTokens: turnCacheReadTokens,
+        });
+        const statusParts: Record<string, string> = {
           model: currentModel,
           tokens: `~${((turnInputTokens + turnOutputTokens) / 1000).toFixed(1)}k`,
-          time: `${elapsed}s`,
-        });
+        };
+        if (cost !== null) {
+          statusParts.cost = `$${cost < 0.01 ? cost.toFixed(4) : cost.toFixed(3)}`;
+        }
+        statusParts.time = `${elapsed}s`;
+        renderStatus(statusParts);
+
+        // Generate title for new sessions after the first user message
+        if (!titleGenerated) {
+          titleGenerated = true;
+          generateSessionTitle(trimmed).then((title) => {
+            if (title && a.session) {
+              a.session.title = title;
+              saveSession(a.session).catch(() => {});
+            }
+          }).catch(() => {});
+        }
 
         // Show prompt suggestions before the next prompt is rendered.
         const { provider: p } = resolveProvider(currentModel);

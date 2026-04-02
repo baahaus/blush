@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { completeInput, getCompletionWindow, isCommand, parseCommand } from './input.js';
+import { completeInput, cursorToRowCol, getCompletionWindow, isCommand, lineCount, lineLength, lineStartIndex, parseCommand } from './input.js';
 import { themes, setTheme, getTheme, listThemes } from './themes.js';
 import { renderMarkdown } from './renderer.js';
 import { sym, dotLeader, rule, box } from './symbols.js';
@@ -206,5 +206,78 @@ describe('renderMarkdown', () => {
 
   it('passes through plain text unchanged', () => {
     expect(renderMarkdown('hello world')).toBe('hello world');
+  });
+});
+
+describe('multiline helpers', () => {
+  describe('cursorToRowCol', () => {
+    it('returns row 0 col 0 for empty string at cursor 0', () => {
+      expect(cursorToRowCol('', 0)).toEqual({ row: 0, col: 0 });
+    });
+
+    it('returns correct column on single line', () => {
+      expect(cursorToRowCol('hello', 3)).toEqual({ row: 0, col: 3 });
+    });
+
+    it('moves to next row after newline', () => {
+      expect(cursorToRowCol('ab\ncd', 3)).toEqual({ row: 1, col: 0 });
+    });
+
+    it('tracks column on second line', () => {
+      expect(cursorToRowCol('ab\ncd', 4)).toEqual({ row: 1, col: 1 });
+    });
+
+    it('handles cursor right at the newline', () => {
+      // cursor at index 2 is the \n itself -- still on row 0
+      expect(cursorToRowCol('ab\ncd', 2)).toEqual({ row: 0, col: 2 });
+    });
+
+    it('handles multiple lines', () => {
+      expect(cursorToRowCol('a\nb\nc', 4)).toEqual({ row: 2, col: 0 });
+    });
+  });
+
+  describe('lineStartIndex', () => {
+    it('returns 0 for row 0', () => {
+      expect(lineStartIndex('hello\nworld', 0)).toBe(0);
+    });
+
+    it('returns index after the first newline for row 1', () => {
+      expect(lineStartIndex('hello\nworld', 1)).toBe(6);
+    });
+
+    it('handles three lines', () => {
+      expect(lineStartIndex('a\nbb\nccc', 2)).toBe(5);
+    });
+  });
+
+  describe('lineLength', () => {
+    it('returns length of single line', () => {
+      expect(lineLength('hello', 0)).toBe(5);
+    });
+
+    it('returns correct length for each line', () => {
+      expect(lineLength('ab\ncde\nf', 0)).toBe(2);
+      expect(lineLength('ab\ncde\nf', 1)).toBe(3);
+      expect(lineLength('ab\ncde\nf', 2)).toBe(1);
+    });
+
+    it('returns 0 for out-of-range row', () => {
+      expect(lineLength('hello', 5)).toBe(0);
+    });
+  });
+
+  describe('lineCount', () => {
+    it('returns 1 for single line', () => {
+      expect(lineCount('hello')).toBe(1);
+    });
+
+    it('counts newlines correctly', () => {
+      expect(lineCount('a\nb\nc')).toBe(3);
+    });
+
+    it('counts trailing newline as extra line', () => {
+      expect(lineCount('a\n')).toBe(2);
+    });
   });
 });

@@ -107,16 +107,69 @@ function buildTranscriptLines(): string[] {
   return lines;
 }
 
+/** Visible width of the prompt string (ANSI stripped). */
+function promptVisibleWidth(): number {
+  return visibleWidth(state.prompt);
+}
+
+/**
+ * Count total terminal rows consumed by the (possibly multiline) input.
+ * First line includes the prompt prefix; continuation lines are padded
+ * with spaces to the same column width as the prompt.
+ */
 function promptRows(columns: number): number {
-  return rowsForWidth(visibleWidth(state.prompt + state.inputLine), columns);
+  const inputLines = state.inputLine.split('\n');
+  const prefixWidth = promptVisibleWidth();
+  let rows = 0;
+  for (let i = 0; i < inputLines.length; i++) {
+    const lineWidth = (i === 0 ? prefixWidth : prefixWidth) + (inputLines[i]?.length ?? 0);
+    rows += rowsForWidth(lineWidth, columns);
+  }
+  return rows;
 }
 
+/**
+ * Compute which terminal row the cursor sits on (0-based from the start
+ * of the prompt area), accounting for multiline input and line wrapping.
+ */
 function cursorRow(columns: number): number {
-  return Math.floor(visibleWidth(state.prompt + state.inputLine.slice(0, state.cursor)) / columns);
+  const inputLines = state.inputLine.split('\n');
+  const prefixWidth = promptVisibleWidth();
+  // Find which input-line the cursor is on
+  let remaining = state.cursor;
+  let termRow = 0;
+  for (let i = 0; i < inputLines.length; i++) {
+    const len = inputLines[i]?.length ?? 0;
+    if (remaining <= len) {
+      // Cursor is on this input-line
+      const charsBefore = (i === 0 ? prefixWidth : prefixWidth) + remaining;
+      termRow += Math.floor(charsBefore / columns);
+      return termRow;
+    }
+    // Account for full rows consumed by this input-line, then skip past \n
+    const lineWidth = (i === 0 ? prefixWidth : prefixWidth) + len;
+    termRow += rowsForWidth(lineWidth, columns);
+    remaining -= len + 1; // +1 for the \n
+  }
+  return termRow;
 }
 
+/**
+ * Compute which terminal column the cursor sits on.
+ */
 function cursorCol(columns: number): number {
-  return visibleWidth(state.prompt + state.inputLine.slice(0, state.cursor)) % columns;
+  const inputLines = state.inputLine.split('\n');
+  const prefixWidth = promptVisibleWidth();
+  let remaining = state.cursor;
+  for (let i = 0; i < inputLines.length; i++) {
+    const len = inputLines[i]?.length ?? 0;
+    if (remaining <= len) {
+      const charsBefore = (i === 0 ? prefixWidth : prefixWidth) + remaining;
+      return charsBefore % columns;
+    }
+    remaining -= len + 1;
+  }
+  return 0;
 }
 
 export function isLayoutActive(): boolean {
@@ -180,7 +233,11 @@ export function clearFooterLines(): void {
 
 export function commitInputToTranscript(line: string): void {
   if (!state.active) return;
-  appendTranscript(`\n${state.prompt}${line}\n`);
+  const inputLines = line.split('\n');
+  const padWidth = visibleWidth(state.prompt);
+  const pad = ' '.repeat(padWidth);
+  const formatted = inputLines.map((l, i) => (i === 0 ? state.prompt : pad) + l).join('\n');
+  appendTranscript(`\n${formatted}\n`);
 }
 
 export function setComposerState(
@@ -245,7 +302,16 @@ export function renderLayout(): void {
 
   process.stdout.write(dividerLine);
   process.stdout.write('\n');
-  process.stdout.write(state.prompt + state.inputLine);
+
+  // Render the (possibly multiline) input with prompt/continuation padding
+  const inputLines = state.inputLine.split('\n');
+  const padWidth = promptVisibleWidth();
+  const pad = ' '.repeat(padWidth);
+  for (let i = 0; i < inputLines.length; i++) {
+    if (i > 0) process.stdout.write('\n');
+    process.stdout.write((i === 0 ? state.prompt : pad) + inputLines[i]);
+  }
+
   if (composerExtra.length > 0) {
     process.stdout.write('\n' + composerExtra.join('\n'));
   }
