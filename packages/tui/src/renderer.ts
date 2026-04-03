@@ -133,7 +133,6 @@ export async function renderWelcome(
   renderLine('');
 
   if (prefersReducedMotion()) {
-    // Static fallback
     for (const [index, line] of bordered.entries()) {
       const color = index === 0 ? theme.prompt : theme.border;
       renderLine(chalk.hex(color)(line));
@@ -142,47 +141,23 @@ export async function renderWelcome(
     return;
   }
 
-  // ── Chase animation: top border draws character by character ──
-  const topBorder = bordered[0];
-  if (topBorder) {
-    const plain = topBorder.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
-    // Draw top border char-by-char in bursts of 3
-    const burst = 3;
-    for (let i = 0; i < plain.length; i += burst) {
-      const chunk = plain.slice(i, i + burst);
-      process.stderr.write(chalk.hex(theme.prompt)(chunk));
-      await pause(4);
-    }
-    process.stderr.write('\n');
-  }
+  // ── Stagger animation through the retained layout system ──
+  // Top border draws with a longer initial pause (frame-first)
+  renderLine(chalk.hex(theme.prompt)(bordered[0]));
+  await pause(50);
 
-  // ── Content lines stagger in with center-out ordering ──
-  const contentLines = bordered.slice(1);
-  const mid = Math.floor(contentLines.length / 2);
-
-  // Build reveal order: center first, radiating outward
-  const revealOrder = Array.from({ length: contentLines.length }, (_, i) => i)
-    .sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid));
-
-  // Pre-render all lines as empty, then reveal in order
-  const revealed = new Set<number>();
-  for (const idx of revealOrder) {
-    revealed.add(idx);
-    // Redraw all content lines (cursor up + overwrite)
-    if (revealed.size > 1) {
-      // Move cursor up to first content line
-      process.stderr.write(`\x1b[${contentLines.length}A`);
-    }
-    for (let i = 0; i < contentLines.length; i++) {
-      if (revealed.has(i)) {
-        const isBottom = i === contentLines.length - 1;
-        const color = isBottom ? theme.prompt : theme.border;
-        process.stderr.write(`\r\x1b[K${chalk.hex(color)(contentLines[i])}\n`);
-      } else {
-        process.stderr.write(`\r\x1b[K\n`);
-      }
-    }
-    await pause(20);
+  // Content + bottom border stagger top-to-bottom.
+  // Timing accelerates toward the center and decelerates at edges
+  // for a "settle into place" feel.
+  const rest = bordered.slice(1);
+  const mid = Math.floor(rest.length / 2);
+  for (const [i, line] of rest.entries()) {
+    const isBottom = i === rest.length - 1;
+    const color = isBottom ? theme.prompt : theme.border;
+    renderLine(chalk.hex(color)(line));
+    const distFromCenter = Math.abs(i - mid) / Math.max(1, mid);
+    const delay = Math.round(8 + distFromCenter * 18);
+    await pause(delay);
   }
 
   renderLine('');
