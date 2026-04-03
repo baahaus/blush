@@ -604,7 +604,6 @@ export async function run(): Promise<void> {
         spinner.stop();
         if (quietStreamOutput) return;
         beginResponse();
-        // Finish current text line before tool output
         if (!assistantLineStart) {
           renderText('\n');
         }
@@ -616,11 +615,11 @@ export async function run(): Promise<void> {
         totalToolCalls++;
         if (quietStreamOutput) return;
         renderToolEnd(name, result);
-        // Reset so next text chunk gets a fresh │ prefix
         assistantLineStart = true;
         assistantCol = 0;
-        // Restart spinner while waiting for next LLM response
+        // Restart spinner with impulse for visual continuity
         spinner.start('thinking');
+        spinner.impulse();
       },
     });
     activeSession = agent.session;

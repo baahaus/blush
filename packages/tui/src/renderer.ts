@@ -131,14 +131,60 @@ export async function renderWelcome(
 
   const bordered = box(lines.map((l) => l || ''), w);
   renderLine('');
-  for (const [index, line] of bordered.entries()) {
-    // Top border in prompt color for visual weight, rest in border color
-    const color = index === 0 ? theme.prompt : theme.border;
-    renderLine(chalk.hex(color)(line));
-    if (index < bordered.length - 1) {
-      await pause(index === 0 ? 30 : 10);
+
+  if (prefersReducedMotion()) {
+    // Static fallback
+    for (const [index, line] of bordered.entries()) {
+      const color = index === 0 ? theme.prompt : theme.border;
+      renderLine(chalk.hex(color)(line));
     }
+    renderLine('');
+    return;
   }
+
+  // ── Chase animation: top border draws character by character ──
+  const topBorder = bordered[0];
+  if (topBorder) {
+    const plain = topBorder.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '');
+    // Draw top border char-by-char in bursts of 3
+    const burst = 3;
+    for (let i = 0; i < plain.length; i += burst) {
+      const chunk = plain.slice(i, i + burst);
+      process.stderr.write(chalk.hex(theme.prompt)(chunk));
+      await pause(4);
+    }
+    process.stderr.write('\n');
+  }
+
+  // ── Content lines stagger in with center-out ordering ──
+  const contentLines = bordered.slice(1);
+  const mid = Math.floor(contentLines.length / 2);
+
+  // Build reveal order: center first, radiating outward
+  const revealOrder = Array.from({ length: contentLines.length }, (_, i) => i)
+    .sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid));
+
+  // Pre-render all lines as empty, then reveal in order
+  const revealed = new Set<number>();
+  for (const idx of revealOrder) {
+    revealed.add(idx);
+    // Redraw all content lines (cursor up + overwrite)
+    if (revealed.size > 1) {
+      // Move cursor up to first content line
+      process.stderr.write(`\x1b[${contentLines.length}A`);
+    }
+    for (let i = 0; i < contentLines.length; i++) {
+      if (revealed.has(i)) {
+        const isBottom = i === contentLines.length - 1;
+        const color = isBottom ? theme.prompt : theme.border;
+        process.stderr.write(`\r\x1b[K${chalk.hex(color)(contentLines[i])}\n`);
+      } else {
+        process.stderr.write(`\r\x1b[K\n`);
+      }
+    }
+    await pause(20);
+  }
+
   renderLine('');
 }
 
@@ -421,11 +467,60 @@ export function renderError(error: string): void {
   }
 }
 
-/** Render a subtle turn separator between user and assistant messages. */
+/**
+ * Turn separator with sweep animation.
+ *
+ * A bright pulse travels left-to-right, leaving the thin rule behind.
+ * Like a fuse burning across the terminal. ~250ms total.
+ * Falls back to static rule on reduced motion or when layout is active
+ * (to avoid conflicting with retained-mode redraws).
+ */
 export function renderTurnSeparator(): void {
   const theme = getTheme();
-  const w = Math.min(process.stdout.columns || 80, 48);
-  renderLine(`  ${chalk.hex(theme.border)(rule(w - 4, sym.thinRule))}`);
+  const w = Math.min(process.stdout.columns || 80, 48) - 4;
+
+  if (prefersReducedMotion() || isLayoutActive()) {
+    renderLine(`  ${chalk.hex(theme.border)(rule(w, sym.thinRule))}`);
+    return;
+  }
+
+  // Animated sweep: schedule frames, final state commits to transcript
+  const totalFrames = 8;
+  const frameMs = 30;
+  let currentFrame = 0;
+
+  function drawFrame() {
+    if (currentFrame >= totalFrames) {
+      // Final: clear animation, commit static rule to transcript
+      process.stderr.write('\r\x1b[K');
+      renderLine(`  ${chalk.hex(theme.border)(rule(w, sym.thinRule))}`);
+      return;
+    }
+
+    const progress = currentFrame / totalFrames;
+    const headPos = Math.floor(progress * w);
+    let line = '  ';
+
+    for (let x = 0; x < w; x++) {
+      if (x < headPos - 2) {
+        // Trail: settled thin rule
+        line += chalk.hex(theme.border)(sym.thinRule);
+      } else if (x >= headPos - 2 && x <= headPos) {
+        // Pulse head: bright accent, 3 chars wide with gradient
+        const dist = headPos - x;
+        const bright = dist === 0 ? theme.prompt : dist === 1 ? theme.accent : theme.border;
+        line += chalk.hex(bright)('\u2501'); // ━ heavy horizontal
+      } else {
+        line += ' ';
+      }
+    }
+
+    process.stderr.write(`\r\x1b[K${line}`);
+    currentFrame++;
+    setTimeout(drawFrame, frameMs);
+  }
+
+  drawFrame();
 }
 
 export function renderSuccess(message: string): void {

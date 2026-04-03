@@ -5,6 +5,7 @@ import { sym } from './symbols.js';
 export interface Spinner {
   start: (label: string) => void;
   update: (label: string) => void;
+  impulse: () => void;
   succeed: (label: string) => void;
   fail: (label: string) => void;
   stop: () => void;
@@ -12,7 +13,6 @@ export interface Spinner {
 
 /**
  * Thinking phrases that rotate during long operations.
- * Product-specific, not generic AI slop.
  */
 const thinkingPhrases = [
   'thinking',
@@ -24,13 +24,49 @@ const thinkingPhrases = [
   'putting it together',
 ];
 
+// ── Spring physics ──────────────────────
+
+interface SpringState {
+  position: number;
+  velocity: number;
+}
+
+const SPRING_TENSION = 160;
+const SPRING_FRICTION = 11;
+
+function springStep(state: SpringState, dt: number): SpringState {
+  const force = -SPRING_TENSION * state.position - SPRING_FRICTION * state.velocity;
+  return {
+    position: state.position + state.velocity * dt,
+    velocity: state.velocity + force * dt,
+  };
+}
+
+function lerpHex(a: string, b: string, t: number): string {
+  const parse = (h: string) => [
+    parseInt(h.slice(1, 3), 16),
+    parseInt(h.slice(3, 5), 16),
+    parseInt(h.slice(5, 7), 16),
+  ];
+  const [ar, ag, ab] = parse(a);
+  const [br, bg, bb] = parse(b);
+  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  const r = clamp(ar + (br - ar) * t);
+  const g = clamp(ag + (bg - ag) * t);
+  const bl = clamp(ab + (bb - ab) * t);
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${bl.toString(16).padStart(2, '0')}`;
+}
+
+// ── Spinner ─────────────────────────────
+
 /**
- * Animated braille spinner with organic timing.
- * Breathes instead of ticking -- slight jitter in frame rate
- * gives the impression of something alive, not mechanical.
+ * Spring-physics spinner with organic breathing.
  *
- * After a few seconds, the label subtly shifts to a new thinking
- * phrase if no explicit update arrives.
+ * The braille glyph cycles as before, but its color now follows
+ * a damped spring. On start, the spring fires with a bright impulse
+ * that decays naturally. Tool events can re-impulse the spring.
+ * Every ~8s of idle, a tiny self-impulse creates a subtle breathing
+ * rhythm so the spinner never looks frozen.
  */
 export function createSpinner(): Spinner {
   let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -41,10 +77,11 @@ export function createSpinner(): Spinner {
   let running = false;
   let startedAt = 0;
   let lastPhraseAt = 0;
+  let lastBreathAt = 0;
+  let spring: SpringState = { position: 0, velocity: 0 };
 
   function nextDelay(): number {
-    // Base 80ms with +/- 25ms jitter for organic feel
-    return 65 + Math.random() * 50;
+    return 55 + Math.random() * 40;
   }
 
   function render() {
@@ -52,15 +89,29 @@ export function createSpinner(): Spinner {
     const theme = getTheme();
     const glyph = sym.spinner[frame % sym.spinner.length];
 
-    // Rotate thinking phrases every ~4s if label hasn't been manually updated
-    const elapsed = Date.now() - startedAt;
-    if (elapsed > 3000 && Date.now() - lastPhraseAt > 4000 && baseLabel === currentLabel) {
-      phraseIndex = (phraseIndex + 1) % thinkingPhrases.length;
-      currentLabel = thinkingPhrases[phraseIndex];
-      lastPhraseAt = Date.now();
+    // Step the spring (~60fps equivalent timestep)
+    spring = springStep(spring, 1 / 16);
+
+    // Breathing: tiny self-impulse every ~8s when idle
+    const now = Date.now();
+    if (now - lastBreathAt > 8000) {
+      spring.velocity += 3;
+      lastBreathAt = now;
     }
 
-    const line = `  ${chalk.hex(theme.accent)(glyph)} ${chalk.hex(theme.muted)(currentLabel)}`;
+    // Map spring position to color interpolation
+    const intensity = Math.min(1, Math.abs(spring.position));
+    const color = lerpHex(theme.muted, theme.accent, intensity);
+
+    // Rotate thinking phrases every ~4s
+    const elapsed = now - startedAt;
+    if (elapsed > 3000 && now - lastPhraseAt > 4000 && baseLabel === currentLabel) {
+      phraseIndex = (phraseIndex + 1) % thinkingPhrases.length;
+      currentLabel = thinkingPhrases[phraseIndex];
+      lastPhraseAt = now;
+    }
+
+    const line = `  ${chalk.hex(color)(glyph)} ${chalk.hex(theme.muted)(currentLabel)}`;
     process.stderr.write(`\r\x1b[K${line}`);
     frame++;
     timeout = setTimeout(render, nextDelay());
@@ -75,6 +126,9 @@ export function createSpinner(): Spinner {
     running = true;
     startedAt = Date.now();
     lastPhraseAt = Date.now();
+    lastBreathAt = Date.now();
+    // Initial impulse -- spring fires bright
+    spring = { position: 1.0, velocity: 0 };
     render();
   }
 
@@ -82,6 +136,11 @@ export function createSpinner(): Spinner {
     currentLabel = label;
     baseLabel = label;
     lastPhraseAt = Date.now();
+  }
+
+  function impulse() {
+    // External trigger (tool start/end) -- add energy to the spring
+    spring.velocity += 6;
   }
 
   function succeed(label: string) {
@@ -109,5 +168,5 @@ export function createSpinner(): Spinner {
     process.stderr.write('\r\x1b[K');
   }
 
-  return { start, update, succeed, fail, stop };
+  return { start, update, impulse, succeed, fail, stop };
 }
