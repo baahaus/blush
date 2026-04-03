@@ -13,6 +13,7 @@ import type {
   Message,
 } from '../types.js';
 import { DEFAULT_CODEX_MODEL } from '../defaults.js';
+import { formatApiError } from '../errors.js';
 
 const CODEX_AUTH_PATH = join(homedir(), '.codex', 'auth.json');
 const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
@@ -181,7 +182,7 @@ export function createCodexProvider(config: ProviderConfig): Provider {
 
     if (!response.ok) {
       const error = await response.text();
-      yield { type: 'error', error: `Codex API error ${response.status}: ${error}` };
+      yield { type: 'error', error: formatApiError('codex', response.status, error) };
       return;
     }
 

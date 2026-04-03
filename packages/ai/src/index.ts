@@ -41,3 +41,4 @@ export {
   type CompressionConfig,
 } from './compression.js';
 export { estimateCost } from './pricing.js';
+export { formatApiError, formatRetryMessage, formatRetryExceeded } from './errors.js';

@@ -10,6 +10,7 @@ import type {
 } from '../types.js';
 import { getApiKey } from '../config.js';
 import { DEFAULT_OPENAI_MODEL } from '../defaults.js';
+import { formatApiError } from '../errors.js';
 
 function toOpenAIMessages(messages: Message[], system?: string): unknown[] {
   const result: unknown[] = [];
@@ -117,7 +118,7 @@ export function createOpenAIProvider(config: ProviderConfig): Provider {
 
     if (!response.ok) {
       const error = await response.text();
-      yield { type: 'error', error: `OpenAI API error ${response.status}: ${error}` };
+      yield { type: 'error', error: formatApiError('openai', response.status, error) };
       return;
     }
 
@@ -227,7 +228,7 @@ export function createOpenAIProvider(config: ProviderConfig): Provider {
 
     if (!response.ok) {
       const error = await response.text();
-      throw new Error(`OpenAI API error ${response.status}: ${error}`);
+      throw new Error(formatApiError('openai', response.status, error));
     }
 
     const data = (await response.json()) as Record<string, unknown>;

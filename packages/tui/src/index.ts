@@ -11,6 +11,7 @@ export {
   renderSuccess,
   renderWarning,
   renderDim,
+  renderTurnSeparator,
   renderStatus,
   renderContextMeter,
   renderDivider,

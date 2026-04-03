@@ -26,6 +26,7 @@ import {
   clearToolActivity,
   renderError,
   renderDim,
+  renderTurnSeparator,
   renderWelcome,
   renderGoodbye,
   renderThemeSwatch,
@@ -429,7 +430,7 @@ export async function run(): Promise<void> {
   function beginResponse(): void {
     if (quietStreamOutput) return;
     if (responseStarted) return;
-    renderText('\n');
+    renderTurnSeparator();
     responseStarted = true;
     assistantLineStart = true;
     assistantCol = 0;

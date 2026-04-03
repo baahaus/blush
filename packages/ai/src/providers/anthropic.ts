@@ -11,24 +11,9 @@ import type {
 import { getApiKey } from '../config.js';
 import { getAnthropicAuth } from '../auth.js';
 import { DEFAULT_ANTHROPIC_MODEL } from '../defaults.js';
+import { formatApiError, formatRetryMessage, formatRetryExceeded } from '../errors.js';
 
 const MAX_INTERACTIVE_RETRY_WAIT_MS = 10_000;
-
-/** Parse raw API error body into a clean human-readable message. */
-function formatApiError(status: number, raw: string): string {
-  try {
-    const parsed = JSON.parse(raw);
-    const msg = parsed?.error?.message || parsed?.message;
-    if (msg) {
-      return `API error ${status}: ${msg}`;
-    }
-  } catch {
-    // Not JSON, use raw
-  }
-  // Truncate long raw responses
-  const clean = raw.slice(0, 200).trim();
-  return `API error ${status}: ${clean}`;
-}
 
 export function getAnthropicRetryDelayMs(
   retryAfterHeader: string | null,
@@ -62,13 +47,10 @@ async function fetchWithRetry(
     const retryAfter = response.headers.get('retry-after');
     const waitMs = getAnthropicRetryDelayMs(retryAfter, attempt);
     if (waitMs === null) {
-      const retrySeconds = retryAfter || 'unknown';
-      process.stderr.write(
-        `Rate limited, retry-after ${retrySeconds}s exceeds ${Math.round(MAX_INTERACTIVE_RETRY_WAIT_MS / 1000)}s cap; failing fast.\n`,
-      );
+      process.stderr.write(`${formatRetryExceeded(retryAfter || 'unknown')}\n`);
       return response;
     }
-    process.stderr.write(`Rate limited, retrying in ${Math.round(waitMs / 1000)}s...\n`);
+    process.stderr.write(`${formatRetryMessage(Math.round(waitMs / 1000))}\n`);
     await new Promise((r) => setTimeout(r, waitMs));
   }
   return fetch(url, init);
@@ -163,7 +145,7 @@ export function createAnthropicProvider(config: ProviderConfig): Provider {
 
     if (!response.ok) {
       const raw = await response.text();
-      yield { type: 'error', error: formatApiError(response.status, raw) };
+      yield { type: 'error', error: formatApiError('anthropic', response.status, raw) };
       return;
     }
 
@@ -283,7 +265,7 @@ export function createAnthropicProvider(config: ProviderConfig): Provider {
 
     if (!response.ok) {
       const raw = await response.text();
-      throw new Error(formatApiError(response.status, raw));
+      throw new Error(formatApiError('anthropic', response.status, raw));
     }
 
     const data = (await response.json()) as Record<string, unknown>;

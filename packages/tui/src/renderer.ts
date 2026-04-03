@@ -409,7 +409,16 @@ export function renderMarkdown(text: string): string {
 
 export function renderError(error: string): void {
   const theme = getTheme();
-  renderLine(`  ${chalk.hex(theme.error).bold(sym.toolFail)} ${chalk.hex(theme.error).bold('error')}  ${chalk.hex(theme.text)(error)}`);
+  const lines = error.split('\n');
+  renderLine(`  ${chalk.hex(theme.error).bold(sym.toolFail)} ${chalk.hex(theme.error).bold('error')}  ${chalk.hex(theme.text)(lines[0])}`);
+  for (let i = 1; i < lines.length; i++) {
+    renderLine(`           ${chalk.hex(theme.dim)(lines[i])}`);
+  }
+}
+
+/** Render a subtle turn separator between user and assistant messages. */
+export function renderTurnSeparator(): void {
+  renderText('\n');
 }
 
 export function renderSuccess(message: string): void {
