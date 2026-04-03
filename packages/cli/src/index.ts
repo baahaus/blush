@@ -44,6 +44,7 @@ import {
   renderLayout,
   resetLayout,
   sym,
+  StreamMarkdown,
 } from '@blush/tui';
 import {
   btw,
@@ -431,6 +432,7 @@ export async function run(): Promise<void> {
   let loopIntervalMs = 0;
   let loopCount = 0;
   const spinner = createSpinner();
+  const streamMd = new StreamMarkdown();
   let abortController: AbortController | null = null;
   let titleGenerated = Boolean(existingSession?.title);
 
@@ -438,6 +440,7 @@ export async function run(): Promise<void> {
     if (quietStreamOutput) return;
     if (responseStarted) return;
     renderTurnSeparator();
+    streamMd.reset();
     responseStarted = true;
     assistantLineStart = true;
     assistantCol = 0;
@@ -445,8 +448,9 @@ export async function run(): Promise<void> {
 
   function renderAssistantChunk(text: string): void {
     const theme = getTheme();
+    const styled = streamMd.process(text);
     const { output, lineStart, col } = prefixStreamChunk(
-      text,
+      styled,
       assistantPrefix(
         `  ${chalk.hex(theme.border)(sym.boxV)} `,
         `  ${chalk.hex(theme.border)(sym.boxV)} `,
@@ -495,6 +499,9 @@ export async function run(): Promise<void> {
         aborted,
       ]);
       if (!quietStreamOutput && !signal.aborted) {
+        // Flush any pending markdown buffer
+        const flushed = streamMd.flush();
+        if (flushed) renderAssistantChunk(flushed);
         renderText('\n');
       }
       return response;

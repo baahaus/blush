@@ -70,6 +70,8 @@ export {
   type Spinner,
 } from './spinner.js';
 
+export { StreamMarkdown } from './stream-markdown.js';
+
 export {
   pause,
   prefersReducedMotion,
