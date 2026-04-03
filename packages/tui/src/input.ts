@@ -292,21 +292,16 @@ export function parseCommand(input: string): { name: string; args: string } {
   };
 }
 
-export function createInput(): {
+export interface InputHandle {
   readline: Interface;
   getLine: (prompt?: string) => Promise<string>;
+  setQueueMode: (cb: ((line: string) => void) | null) => void;
   close: () => void;
-};
-export function createInput(options: InputOptions): {
-  readline: Interface;
-  getLine: (prompt?: string) => Promise<string>;
-  close: () => void;
-};
-export function createInput(options: InputOptions = {}): {
-  readline: Interface;
-  getLine: (prompt?: string) => Promise<string>;
-  close: () => void;
-} {
+}
+
+export function createInput(): InputHandle;
+export function createInput(options: InputOptions): InputHandle;
+export function createInput(options: InputOptions = {}): InputHandle {
   const inputStream = process.stdin;
   const historyFile = options.historyFile || DEFAULT_HISTORY_FILE;
   const history = loadHistory(historyFile);
@@ -321,6 +316,7 @@ export function createInput(options: InputOptions = {}): {
   let completion: CompletionSession | null = null;
   let resolveLine: ((value: string) => void) | null = null;
   let completionRequestId = 0;
+  let queueCallback: ((line: string) => void) | null = null;
 
   emitKeypressEvents(inputStream);
 
@@ -447,6 +443,19 @@ export function createInput(options: InputOptions = {}): {
     historyIndex = history.length;
     historyDraft = '';
     resetCompletion();
+
+    // Queue mode: don't resolve the Promise, just forward to callback and reset input
+    if (queueCallback && submitted.trim()) {
+      if (isLayoutActive()) {
+        commitInputToTranscript(submitted);
+      }
+      line = '';
+      cursor = 0;
+      queueCallback(submitted);
+      render();
+      return;
+    }
+
     active = false;
     if (isLayoutActive()) {
       commitInputToTranscript(submitted);
@@ -632,6 +641,10 @@ export function createInput(options: InputOptions = {}): {
     });
   }
 
+  function setQueueMode(cb: ((line: string) => void) | null): void {
+    queueCallback = cb;
+  }
+
   function close(): void {
     active = false;
     cleanupRawMode();
@@ -643,6 +656,7 @@ export function createInput(options: InputOptions = {}): {
   return {
     readline: fakeReadline,
     getLine,
+    setQueueMode,
     close,
   };
 }

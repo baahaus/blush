@@ -420,6 +420,8 @@ export async function run(): Promise<void> {
   let assistantCol = 0;
   const sessionStartTime = Date.now();
   let totalToolCalls = 0;
+  const messageQueue: string[] = [];
+  let isProcessing = false;
   const spinner = createSpinner();
   let abortController: AbortController | null = null;
   let titleGenerated = Boolean(existingSession?.title);
@@ -500,6 +502,59 @@ export async function run(): Promise<void> {
       process.stdin.off('keypress', onAbortKey);
       abortController = null;
     }
+  }
+
+  async function sendTurnWithStatus(a: Awaited<ReturnType<typeof createAgent>>, message: string) {
+    const usageBefore = { ...a.usage.total };
+    const toolCallsBefore = totalToolCalls;
+    const startTime = Date.now();
+    await sendAndRender(a, message);
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    const total = a.usage.total;
+    const turnInputTokens = total.inputTokens - usageBefore.inputTokens;
+    const turnOutputTokens = total.outputTokens - usageBefore.outputTokens;
+    const turnCacheReadTokens = (total.cacheReadTokens || 0) - (usageBefore.cacheReadTokens || 0);
+    const turnCost = estimateCost(currentModel, {
+      inputTokens: turnInputTokens,
+      outputTokens: turnOutputTokens,
+      cacheReadTokens: turnCacheReadTokens,
+    });
+    const sessionCost = estimateCost(currentModel, {
+      inputTokens: total.inputTokens,
+      outputTokens: total.outputTokens,
+      cacheReadTokens: total.cacheReadTokens,
+    });
+    const statusParts: Record<string, string> = {
+      model: currentModel,
+      tokens: `~${((turnInputTokens + turnOutputTokens) / 1000).toFixed(1)}k`,
+    };
+    if (sessionCost !== null) {
+      const fmt = (v: number) => v < 0.01 ? v.toFixed(4) : v.toFixed(3);
+      statusParts.cost = turnCost !== null && total.calls > 1
+        ? `$${fmt(turnCost)} ($${fmt(sessionCost)} session)`
+        : `$${fmt(sessionCost)}`;
+    }
+    const turnToolCalls = totalToolCalls - toolCallsBefore;
+    if (turnToolCalls > 0) {
+      statusParts.tools = String(turnToolCalls);
+    }
+    statusParts.time = `${elapsed}s`;
+    renderStatus(statusParts);
+
+    if (!titleGenerated) {
+      titleGenerated = true;
+      generateSessionTitle(message).then((title) => {
+        if (title && a.session) {
+          a.session.title = title;
+          saveSession(a.session).catch(() => {});
+        }
+      }).catch(() => {});
+    }
+
+    const { provider: p } = resolveProvider(currentModel);
+    await showSuggestions(a.getMessages(), p, currentModel);
+    await saveSession(a.session);
   }
 
   async function getAgent() {
@@ -1292,58 +1347,31 @@ export async function run(): Promise<void> {
         continue;
       }
 
-      // Send to agent
+      // Send to agent (with follow-up queue support)
       try {
         const a = await getAgent();
 
-        const usageBefore = { ...a.usage.total };
-        const toolCallsBefore = totalToolCalls;
-        const startTime = Date.now();
-        await sendAndRender(a, trimmed);
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-
-        // Show status after response
-        const total = a.usage.total;
-        const turnInputTokens = total.inputTokens - usageBefore.inputTokens;
-        const turnOutputTokens = total.outputTokens - usageBefore.outputTokens;
-        const turnCacheReadTokens = (total.cacheReadTokens || 0) - (usageBefore.cacheReadTokens || 0);
-        const cost = estimateCost(currentModel, {
-          inputTokens: turnInputTokens,
-          outputTokens: turnOutputTokens,
-          cacheReadTokens: turnCacheReadTokens,
+        // Enable queue mode: user can type while agent processes
+        isProcessing = true;
+        input.setQueueMode((queuedLine) => {
+          messageQueue.push(queuedLine);
+          renderDim(`  queued (${messageQueue.length} pending)`);
         });
-        const statusParts: Record<string, string> = {
-          model: currentModel,
-          tokens: `~${((turnInputTokens + turnOutputTokens) / 1000).toFixed(1)}k`,
-        };
-        if (cost !== null) {
-          statusParts.cost = `$${cost < 0.01 ? cost.toFixed(4) : cost.toFixed(3)}`;
-        }
-        const turnToolCalls = totalToolCalls - toolCallsBefore;
-        if (turnToolCalls > 0) {
-          statusParts.tools = String(turnToolCalls);
-        }
-        statusParts.time = `${elapsed}s`;
-        renderStatus(statusParts);
 
-        // Generate title for new sessions after the first user message
-        if (!titleGenerated) {
-          titleGenerated = true;
-          generateSessionTitle(trimmed).then((title) => {
-            if (title && a.session) {
-              a.session.title = title;
-              saveSession(a.session).catch(() => {});
-            }
-          }).catch(() => {});
+        await sendTurnWithStatus(a, trimmed);
+
+        // Drain queued follow-ups
+        while (messageQueue.length > 0) {
+          const queued = messageQueue.shift()!;
+          await sendTurnWithStatus(a, queued);
         }
 
-        // Show prompt suggestions before the next prompt is rendered.
-        const { provider: p } = resolveProvider(currentModel);
-        await showSuggestions(a.getMessages(), p, currentModel);
-
-        // Auto-save
-        await saveSession(a.session);
+        // Disable queue mode
+        input.setQueueMode(null);
+        isProcessing = false;
       } catch (err) {
+        input.setQueueMode(null);
+        isProcessing = false;
         renderError((err as Error).message);
       }
     } catch (err) {

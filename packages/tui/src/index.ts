@@ -46,6 +46,7 @@ export {
   completeInput,
   isCommand,
   parseCommand,
+  type InputHandle,
 } from './input.js';
 
 export {
