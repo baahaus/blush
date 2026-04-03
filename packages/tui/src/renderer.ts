@@ -92,18 +92,18 @@ function timeGreeting(): string {
 }
 
 const farewells = [
-  'until next time.',
-  'happy shipping.',
-  'go build something great.',
-  'see you soon.',
-  'good work today.',
-  'take care out there.',
-  'nice work.',
-  'ship it.',
-  'onwards.',
+  'go make something.',
   'that was a good one.',
-  'rest well.',
-  'back at it whenever you are.',
+  'see you tomorrow.',
+  'don\'t forget to push.',
+  'the code is better now.',
+  'rest. you earned it.',
+  'back whenever.',
+  'left it better than we found it.',
+  'onwards.',
+  'save your work.',
+  'good taste takes time.',
+  'trust the process.',
 ];
 
 export async function renderWelcome(
@@ -132,9 +132,10 @@ export async function renderWelcome(
   const bordered = box(lines.map((l) => l || ''), w);
   renderLine('');
   for (const [index, line] of bordered.entries()) {
-    renderLine(chalk.hex(theme.border)(line));
+    // Top border in prompt color for visual weight, rest in border color
+    const color = index === 0 ? theme.prompt : theme.border;
+    renderLine(chalk.hex(color)(line));
     if (index < bordered.length - 1) {
-      // First line (top border) gets a longer pause for "frame first" feel
       await pause(index === 0 ? 30 : 10);
     }
   }
@@ -275,9 +276,13 @@ export function renderToolStart(name: string, detail?: string): void {
 export function renderToolEnd(name: string, result: string): void {
   const theme = getTheme();
 
-  // Elapsed time
+  // Elapsed time -- progressive: silent under 200ms, subtle 200ms-2s, prominent 2s+
   const elapsed = finishToolTimer(name);
-  const timeLabel = elapsed > 500 ? `  ${chalk.hex(theme.muted)(`${(elapsed / 1000).toFixed(1)}s`)}` : '';
+  const timeLabel = elapsed >= 2000
+    ? `  ${chalk.hex(theme.warning)(`${(elapsed / 1000).toFixed(1)}s`)}`
+    : elapsed >= 200
+      ? `  ${chalk.hex(theme.muted)(`${(elapsed / 1000).toFixed(1)}s`)}`
+      : '';
 
   // Compute a compact summary
   const lineCount = result.split('\n').length;
@@ -418,7 +423,9 @@ export function renderError(error: string): void {
 
 /** Render a subtle turn separator between user and assistant messages. */
 export function renderTurnSeparator(): void {
-  renderText('\n');
+  const theme = getTheme();
+  const w = Math.min(process.stdout.columns || 80, 48);
+  renderLine(`  ${chalk.hex(theme.border)(rule(w - 4, sym.thinRule))}`);
 }
 
 export function renderSuccess(message: string): void {

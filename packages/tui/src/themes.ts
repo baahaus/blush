@@ -10,6 +10,7 @@
 export interface Theme {
   name: string;
   label: string;        // human-friendly name for display
+  bg: 'light' | 'dark'; // intended terminal background
   prompt: string;       // hex -- prompt character, the loudest color
   accent: string;       // hex -- tool names, commands, highlights
   text: string;         // hex -- primary body text
@@ -26,6 +27,7 @@ export const themes: Record<string, Theme> = {
   blush: {
     name: 'blush',
     label: 'Blush',
+    bg: 'light',
     prompt: '#D0605A',     // warm coral -- THE blush color (deepened for light bg)
     accent: '#A07038',     // warm gold (deepened for light bg)
     text: '#4A4238',       // warm brown (dark enough for light backgrounds)
@@ -41,6 +43,7 @@ export const themes: Record<string, Theme> = {
   mono: {
     name: 'mono',
     label: 'Monochrome',
+    bg: 'dark',
     prompt: '#C8BEB4',     // warm off-white
     accent: '#E8DDD3',     // cream highlight
     text: '#B0A89E',       // warm gray
@@ -56,6 +59,7 @@ export const themes: Record<string, Theme> = {
   ocean: {
     name: 'ocean',
     label: 'Deep Ocean',
+    bg: 'dark',
     prompt: '#5CB8B2',     // warm teal
     accent: '#7AD4CA',     // seafoam
     text: '#D4E8E4',       // cool cream
@@ -71,6 +75,7 @@ export const themes: Record<string, Theme> = {
   forest: {
     name: 'forest',
     label: 'Old Growth',
+    bg: 'dark',
     prompt: '#6AAF6A',     // rich green
     accent: '#C4A862',     // amber-gold
     text: '#D4DCD0',       // pale sage
@@ -86,6 +91,7 @@ export const themes: Record<string, Theme> = {
   sunset: {
     name: 'sunset',
     label: 'Golden Hour',
+    bg: 'dark',
     prompt: '#E89050',     // warm amber
     accent: '#E8786F',     // coral
     text: '#F0E4D8',       // warm cream
@@ -101,6 +107,7 @@ export const themes: Record<string, Theme> = {
   rose: {
     name: 'rose',
     label: 'Rose Garden',
+    bg: 'dark',
     prompt: '#D87090',     // dusty rose
     accent: '#E8A0B0',     // light pink
     text: '#EAE0E2',       // blush cream
@@ -116,6 +123,7 @@ export const themes: Record<string, Theme> = {
   hacker: {
     name: 'hacker',
     label: 'Phosphor',
+    bg: 'dark',
     prompt: '#50D050',     // phosphor green
     accent: '#40B040',     // darker green
     text: '#A0D8A0',       // light green
