@@ -106,6 +106,47 @@ const farewells = [
   'trust the process.',
 ];
 
+/**
+ * Interpolate between two hex colors.
+ */
+function lerpColor(a: string, b: string, t: number): string {
+  const parse = (h: string) => [
+    parseInt(h.slice(1, 3), 16),
+    parseInt(h.slice(3, 5), 16),
+    parseInt(h.slice(5, 7), 16),
+  ];
+  const [ar, ag, ab] = parse(a);
+  const [br, bg, bb] = parse(b);
+  const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+  const r = clamp(ar + (br - ar) * t);
+  const g = clamp(ag + (bg - ag) * t);
+  const bl = clamp(ab + (bb - ab) * t);
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${bl.toString(16).padStart(2, '0')}`;
+}
+
+/**
+ * Generate a gradient bar -- a warm pulse of color that rises and falls
+ * across the terminal width. Uses block shade characters with per-character
+ * truecolor interpolation. Like color rising to the surface.
+ */
+function gradientBar(width: number, fromColor: string, peakColor: string, toColor: string): string {
+  const shades = [' ', '░', '▒', '▓', '█'];
+  let result = '';
+  for (let i = 0; i < width; i++) {
+    const t = i / (width - 1); // 0 → 1
+    // Bell curve: peak at center, fade at edges. Squared for sharper peak.
+    const intensity = Math.pow(Math.sin(t * Math.PI), 2);
+    const shadeIdx = Math.round(intensity * (shades.length - 1));
+    const shade = shades[Math.min(shadeIdx, shades.length - 1)];
+    // Smooth color: from → peak → to
+    const color = t < 0.5
+      ? lerpColor(fromColor, peakColor, t * 2)
+      : lerpColor(peakColor, toColor, (t - 0.5) * 2);
+    result += shade === ' ' ? ' ' : chalk.hex(color)(shade);
+  }
+  return result;
+}
+
 export async function renderWelcome(
   version: string,
   model: string,
@@ -113,30 +154,30 @@ export async function renderWelcome(
   session = 'new session',
 ): Promise<void> {
   const theme = getTheme();
-  const w = Math.min(process.stdout.columns || 80, 68);
+  const w = Math.min(process.stdout.columns || 80, 64) - 4;
 
-  const lines = [
-    '',
-    `  ${chalk.hex(theme.prompt).bold('blush')}  ${chalk.hex(theme.dim)(timeGreeting())}`,
-    '',
-    `  ${chalk.hex(theme.border)(rule(Math.max(12, w - 14), sym.thinRule))}`,
-    '',
-    `  ${chalk.hex(theme.muted)('project')}  ${chalk.hex(theme.text).bold(project)}`,
-    `  ${chalk.hex(theme.muted)('model')}    ${chalk.hex(theme.accent)(model)}`,
-    `  ${chalk.hex(theme.muted)('session')}  ${chalk.hex(theme.dim)(session)}`,
-    '',
-    `  ${chalk.hex(theme.dim)(`ap.haus ${sym.dot} v${version}`)}`,
-    '',
-  ];
+  // The gradient bars -- warm pulse like color rising to the skin
+  const topBar = gradientBar(w, theme.border, theme.prompt, theme.border);
+  const bottomBar = gradientBar(w, theme.border, theme.accent, theme.border);
 
-  const bordered = box(lines.map((l) => l || ''), w);
+  // Letter-spaced wordmark
+  const wordmark = 'b l u s h'.split('').map((c, i) => {
+    const t = i / 8;
+    const color = lerpColor(theme.prompt, theme.accent, t);
+    return c === ' ' ? ' ' : chalk.hex(color).bold(c);
+  }).join('');
+
   renderLine('');
-
-  for (const [i, line] of bordered.entries()) {
-    const isEdge = i === 0 || i === bordered.length - 1;
-    renderLine(chalk.hex(isEdge ? theme.prompt : theme.border)(line));
-  }
-
+  renderLine(`  ${topBar}`);
+  renderLine('');
+  renderLine(`  ${wordmark}    ${chalk.hex(theme.dim)(timeGreeting())}`);
+  renderLine('');
+  renderLine(`  ${chalk.hex(theme.muted)('project')}  ${chalk.hex(theme.text).bold(project)}`);
+  renderLine(`  ${chalk.hex(theme.muted)('model')}    ${chalk.hex(theme.accent)(model)}`);
+  renderLine(`  ${chalk.hex(theme.muted)('session')}  ${chalk.hex(theme.dim)(session)}`);
+  renderLine('');
+  renderLine(`  ${chalk.hex(theme.dim)(`ap.haus ${sym.dot} v${version}`)}`);
+  renderLine(`  ${bottomBar}`);
   renderLine('');
 }
 
