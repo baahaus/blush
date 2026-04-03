@@ -113,10 +113,10 @@ const farewells = [
 
 let gradientTimer: ReturnType<typeof setInterval> | null = null;
 let gradientPhase = 0;
-const GRADIENT_ROWS = 3;
+const GRADIENT_ROWS = 4;
 
-// Row thresholds: top row needs high intensity, bottom row shows everything
-const ROW_THRESHOLDS = [0.55, 0.25, 0.04];
+// Row thresholds: top row = narrow spike, bottom rows widen out
+const ROW_THRESHOLDS = [0.70, 0.40, 0.18, 0.03];
 
 /**
  * Start the breathing gradient animation.
@@ -155,8 +155,8 @@ function animatedGradientBlock(width: number, baseColor: string, peakColor: stri
 
     for (let i = 0; i < width; i++) {
       const t = i / (width - 1);
-      // Base bell curve
-      const baseIntensity = Math.pow(Math.sin(t * Math.PI), 2);
+      // Star shape: sharp peak with concave sides (high exponent pinches the curve)
+      const baseIntensity = Math.pow(Math.sin(t * Math.PI), 4);
       // Traveling pulse: smooth gaussian-ish, wider than before
       const pulseDist = Math.min(Math.abs(t - phase), Math.abs(t - phase + 1), Math.abs(t - phase - 1));
       const pulseBoost = Math.exp(-pulseDist * pulseDist * 30) * 0.5;
