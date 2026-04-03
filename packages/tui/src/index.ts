@@ -35,6 +35,7 @@ export {
   setComposerState,
   renderLayout,
   commitInputToTranscript,
+  setHeaderLines,
   clearFooterLines,
   resetLayout,
 } from './layout.js';

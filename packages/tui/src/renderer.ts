@@ -7,6 +7,7 @@ import {
   isLayoutActive,
   renderLayout,
   setFooterLines,
+  setHeaderLines,
 } from './layout.js';
 import { pause, typeOut, drawRule, prefersReducedMotion } from './motion.js';
 
@@ -119,23 +120,21 @@ const ROW_THRESHOLDS = [0.55, 0.25, 0.04];
 
 /**
  * Start the breathing gradient animation.
- * A 3-row mountain of block shades with a bright pulse traveling through.
- * Renders directly to the top lines of the screen via cursor positioning.
+ * A 3-row mirrored mountain of block shades with a bright pulse traveling through.
+ * Renders through the layout system's header zone so it doesn't fight redraws.
  */
 export function startGradientBreathing(width: number): void {
   if (prefersReducedMotion() || gradientTimer) return;
   const w = Math.min(width - 4, 60);
 
   gradientTimer = setInterval(() => {
+    if (!isLayoutActive()) return;
     gradientPhase = (gradientPhase + 0.012) % 1.0;
     const theme = getTheme();
     const rows = animatedGradientBlock(w, theme.border, theme.prompt, gradientPhase);
-    process.stderr.write('\x1b[s');
-    for (let r = 0; r < rows.length; r++) {
-      process.stderr.write(`\x1b[${r + 2};1H\x1b[K  ${rows[r]}`);
-    }
-    process.stderr.write('\x1b[u');
-  }, 33); // ~30fps for smooth fluid motion
+    setHeaderLines(rows.map((r) => `  ${r}`));
+    renderLayout();
+  }, 33);
 }
 
 export function stopGradientBreathing(): void {

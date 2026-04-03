@@ -6,6 +6,7 @@ const ANSI_PATTERN = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
 interface LayoutState {
   active: boolean;
+  headerLines: string[];
   transcriptLines: string[];
   transcriptTail: string;
   footerLines: string[];
@@ -18,6 +19,7 @@ interface LayoutState {
 
 const state: LayoutState = {
   active: false,
+  headerLines: [],
   transcriptLines: [],
   transcriptTail: '',
   footerLines: [],
@@ -229,6 +231,10 @@ export function appendTranscript(text: string): void {
   }
 }
 
+export function setHeaderLines(lines: string[]): void {
+  state.headerLines = lines;
+}
+
 export function setFooterLines(lines: string[]): void {
   if (!state.active) {
     if (lines.length > 0) {
@@ -283,21 +289,29 @@ export function renderLayout(): void {
   const columns = Math.max(20, process.stdout.columns || 80);
   const rows = Math.max(10, process.stdout.rows || 24);
 
+  const header = state.headerLines;
   const transcript = buildTranscriptLines();
   const footer = state.footerLines;
   const composerExtra = state.composerLines;
   const dividerLine = composerDivider(columns);
   const promptRowCount = promptRows(columns);
+  const headerRows = totalRows(header, columns);
   const footerRows = totalRows(footer, columns);
   const composerRows = totalRows(composerExtra, columns);
   const dividerRows = lineRows(dividerLine, columns);
-  const reservedRows = footerRows + composerRows + promptRowCount + dividerRows;
+  const reservedRows = headerRows + footerRows + composerRows + promptRowCount + dividerRows;
   const transcriptSpace = Math.max(0, rows - reservedRows);
   const visibleTranscript = sliceLinesToRows(transcript, transcriptSpace, columns);
   const blankRows = Math.max(0, transcriptSpace - visibleTranscript.rows);
 
   clearScreen();
   hideCursor();
+
+  // Header (animated gradient lives here)
+  if (header.length > 0) {
+    process.stdout.write(header.join('\n'));
+    process.stdout.write('\n');
+  }
 
   if (visibleTranscript.lines.length > 0) {
     process.stdout.write(visibleTranscript.lines.join('\n'));
