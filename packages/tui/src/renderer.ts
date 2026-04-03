@@ -132,32 +132,9 @@ export async function renderWelcome(
   const bordered = box(lines.map((l) => l || ''), w);
   renderLine('');
 
-  if (prefersReducedMotion()) {
-    for (const [index, line] of bordered.entries()) {
-      const color = index === 0 ? theme.prompt : theme.border;
-      renderLine(chalk.hex(color)(line));
-    }
-    renderLine('');
-    return;
-  }
-
-  // ── Stagger animation through the retained layout system ──
-  // Top border draws with a longer initial pause (frame-first)
-  renderLine(chalk.hex(theme.prompt)(bordered[0]));
-  await pause(50);
-
-  // Content + bottom border stagger top-to-bottom.
-  // Timing accelerates toward the center and decelerates at edges
-  // for a "settle into place" feel.
-  const rest = bordered.slice(1);
-  const mid = Math.floor(rest.length / 2);
-  for (const [i, line] of rest.entries()) {
-    const isBottom = i === rest.length - 1;
-    const color = isBottom ? theme.prompt : theme.border;
-    renderLine(chalk.hex(color)(line));
-    const distFromCenter = Math.abs(i - mid) / Math.max(1, mid);
-    const delay = Math.round(8 + distFromCenter * 18);
-    await pause(delay);
+  for (const [i, line] of bordered.entries()) {
+    const isEdge = i === 0 || i === bordered.length - 1;
+    renderLine(chalk.hex(isEdge ? theme.prompt : theme.border)(line));
   }
 
   renderLine('');
