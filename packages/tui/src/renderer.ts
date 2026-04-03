@@ -112,26 +112,31 @@ const farewells = [
 
 let gradientTimer: ReturnType<typeof setInterval> | null = null;
 let gradientPhase = 0;
+const GRADIENT_ROWS = 3;
+
+// Row thresholds: top row needs high intensity, bottom row shows everything
+const ROW_THRESHOLDS = [0.55, 0.25, 0.04];
 
 /**
- * Start the breathing gradient animation in the composer divider zone.
- * A bright pulse travels through the gradient bar on a slow loop,
- * making it feel alive. Renders to stderr with cursor positioning
- * so it doesn't pollute the transcript.
+ * Start the breathing gradient animation.
+ * A 3-row mountain of block shades with a bright pulse traveling through.
+ * Renders directly to the top lines of the screen via cursor positioning.
  */
 export function startGradientBreathing(width: number): void {
   if (prefersReducedMotion() || gradientTimer) return;
   const w = Math.min(width - 4, 60);
 
   gradientTimer = setInterval(() => {
-    gradientPhase = (gradientPhase + 0.02) % 1.0;
+    gradientPhase = (gradientPhase + 0.012) % 1.0;
     const theme = getTheme();
-    const bar = animatedGradientBar(w, theme.border, theme.prompt, gradientPhase);
-    // Render the gradient as the FIRST line of the footer
-    // This is a fire-and-forget visual -- the layout will overwrite next redraw
-    // so we write directly to stderr at the top of the screen
-    process.stderr.write(`\x1b[s\x1b[2;1H\x1b[K  ${bar}\x1b[u`);
-  }, 50);
+    const rows = animatedGradientBlock(w, theme.border, theme.prompt, gradientPhase);
+    // Write all rows at the top of the screen
+    process.stderr.write('\x1b[s'); // save cursor
+    for (let r = 0; r < rows.length; r++) {
+      process.stderr.write(`\x1b[${r + 2};1H\x1b[K  ${rows[r]}`);
+    }
+    process.stderr.write('\x1b[u'); // restore cursor
+  }, 33); // ~30fps for smooth fluid motion
 }
 
 export function stopGradientBreathing(): void {
@@ -141,28 +146,42 @@ export function stopGradientBreathing(): void {
   }
 }
 
-/** Gradient bar with a traveling bright pulse. */
-function animatedGradientBar(width: number, baseColor: string, peakColor: string, phase: number): string {
+/** 3-row gradient mountain with a traveling bright pulse. */
+function animatedGradientBlock(width: number, baseColor: string, peakColor: string, phase: number): string[] {
   const shades = [' ', '░', '▒', '▓', '█'];
-  let result = '';
-  for (let i = 0; i < width; i++) {
-    const t = i / (width - 1);
-    // Base bell curve (static shape)
-    const baseIntensity = Math.pow(Math.sin(t * Math.PI), 2);
-    // Traveling pulse: a bright spot that moves through the bar
-    const pulseCenter = phase;
-    const pulseDist = Math.abs(t - pulseCenter);
-    const pulseBoost = Math.max(0, 1 - pulseDist * 5) * 0.4;
-    const intensity = Math.min(1, baseIntensity + pulseBoost);
+  const rows: string[] = [];
 
-    const shadeIdx = Math.round(intensity * (shades.length - 1));
-    const shade = shades[Math.min(shadeIdx, shades.length - 1)];
-    // Color shifts brighter near the pulse
-    const colorT = Math.min(1, baseIntensity + pulseBoost * 2);
-    const color = lerpColor(baseColor, peakColor, colorT);
-    result += shade === ' ' ? ' ' : chalk.hex(color)(shade);
+  for (let row = 0; row < GRADIENT_ROWS; row++) {
+    const threshold = ROW_THRESHOLDS[row];
+    let line = '';
+
+    for (let i = 0; i < width; i++) {
+      const t = i / (width - 1);
+      // Base bell curve
+      const baseIntensity = Math.pow(Math.sin(t * Math.PI), 2);
+      // Traveling pulse: smooth gaussian-ish, wider than before
+      const pulseDist = Math.min(Math.abs(t - phase), Math.abs(t - phase + 1), Math.abs(t - phase - 1));
+      const pulseBoost = Math.exp(-pulseDist * pulseDist * 30) * 0.5;
+      const intensity = Math.min(1, baseIntensity + pulseBoost);
+
+      if (intensity < threshold) {
+        line += ' ';
+        continue;
+      }
+
+      // Map the excess above threshold to shade level
+      const excess = (intensity - threshold) / (1 - threshold);
+      const shadeIdx = Math.round(excess * (shades.length - 1));
+      const shade = shades[Math.min(shadeIdx, shades.length - 1)];
+      const colorT = Math.min(1, excess + pulseBoost * 2);
+      const color = lerpColor(baseColor, peakColor, colorT);
+      line += shade === ' ' ? ' ' : chalk.hex(color)(shade);
+    }
+
+    rows.push(line);
   }
-  return result;
+
+  return rows;
 }
 
 /**
@@ -224,7 +243,11 @@ export async function renderWelcome(
 
   const barWidth = w - 4;
   renderLine('');
-  renderLine(`  ${gradientBar(barWidth, theme.border, theme.prompt, theme.border)}`);
+  // Static 3-row mountain gradient (animation replaces this in-place)
+  const staticRows = animatedGradientBlock(barWidth, theme.border, theme.prompt, 0.5);
+  for (const row of staticRows) {
+    renderLine(`  ${row}`);
+  }
   renderLine('');
   renderLine(`  ${wordmark}    ${chalk.hex(theme.dim)(timeGreeting())}`);
   renderLine('');
