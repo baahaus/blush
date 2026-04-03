@@ -57,6 +57,8 @@ import {
   listSelectableModels,
   resolveModelSelection,
   showModelSelector,
+  addFavorite,
+  removeFavorite,
 } from './commands/index.js';
 import { assistantPrefix, prefixStreamChunk, summarizeToolInput } from './rendering.js';
 
@@ -288,6 +290,8 @@ function printHelp(): void {
     ['  /effort [on|off]', 'Toggle extended thinking'],
     ['  /mcp', 'Show connected MCP servers and tools'],
     ['  /model [name|number]', 'Switch model or open selector'],
+    ['  /model fav <name>', 'Add model to favorites'],
+    ['  /model unfav <name>', 'Remove model from favorites'],
     ['  /new', 'Start a new session'],
     ['  /resume [id|number]', 'Resume another saved session'],
     ['  /sessions [delete]', 'Browse or manage sessions'],
@@ -691,10 +695,21 @@ export async function run(): Promise<void> {
         );
       }
 
+      if (line.startsWith('/model fav ') || line.startsWith('/model unfav ')) {
+        return matchingCompletions(
+          line,
+          listSelectableModels().map((model) => `${line.startsWith('/model unfav') ? '/model unfav' : '/model fav'} ${model.name}`),
+        );
+      }
+
       if (line.startsWith('/model ')) {
         return matchingCompletions(
           line,
-          listSelectableModels().map((model) => `/model ${model.name}`),
+          [
+            '/model fav',
+            '/model unfav',
+            ...listSelectableModels().map((model) => `/model ${model.name}`),
+          ],
         );
       }
 
@@ -872,8 +887,43 @@ export async function run(): Promise<void> {
         return true;
       }
 
-      case 'model':
-        if (!args) {
+      case 'model': {
+        const modelArgs = args.trim();
+
+        // /model fav <name> — add to favorites
+        if (modelArgs.startsWith('fav ')) {
+          const name = modelArgs.slice(4).trim();
+          if (!name) {
+            renderError('Usage: /model fav <model-name>');
+            return true;
+          }
+          const added = await addFavorite(name);
+          if (added) {
+            renderLine(`  ${chalk.hex(theme.success)(sym.toolDone)} ${chalk.hex(theme.text)(name)} added to favorites`);
+          } else {
+            renderDim(`  ${name} is already a favorite`);
+          }
+          return true;
+        }
+
+        // /model unfav <name> — remove from favorites
+        if (modelArgs.startsWith('unfav ')) {
+          const name = modelArgs.slice(6).trim();
+          if (!name) {
+            renderError('Usage: /model unfav <model-name>');
+            return true;
+          }
+          const removed = await removeFavorite(name);
+          if (removed) {
+            renderLine(`  ${chalk.hex(theme.success)(sym.toolDone)} ${chalk.hex(theme.text)(name)} removed from favorites`);
+          } else {
+            renderDim(`  ${name} is not a favorite`);
+          }
+          return true;
+        }
+
+        // /model — interactive selector
+        if (!modelArgs) {
           showModelSelector(currentModel);
           const selected = await input.getLine('  Select model number or name › ');
           if (!selected.trim()) {
@@ -889,12 +939,15 @@ export async function run(): Promise<void> {
           }
           return true;
         }
+
+        // /model <name|number> — direct switch
         try {
-          await switchModel(resolveModelSelection(args.trim()) || args.trim());
+          await switchModel(resolveModelSelection(modelArgs) || modelArgs);
         } catch {
-          renderError(`Unknown model: ${args.trim()}`);
+          renderError(`Unknown model: ${modelArgs}`);
         }
         return true;
+      }
 
       case 'sessions': {
         const currentSessionId = agent?.session.id || activeSession?.id;

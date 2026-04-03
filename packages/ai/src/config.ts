@@ -19,6 +19,7 @@ export interface BlushConfig {
   default_model?: string;
   default_theme?: string;
   default_provider?: string;
+  favorite_models?: string[];
   mcpServers?: MCPServerEntry[];
 }
 
