@@ -88,12 +88,24 @@ export class ExtensionManager {
     const entries = await readdir(dir);
 
     for (const entry of entries) {
-      const fullPath = join(dir, entry);
+      // Block path traversal in extension filenames
+      if (entry.includes('..') || entry.startsWith('/')) {
+        console.error(`Skipping suspicious extension path: ${entry}`);
+        continue;
+      }
+
+      const fullPath = resolve(join(dir, entry));
+
+      // Verify resolved path stays within the extension directory
+      if (!fullPath.startsWith(resolve(dir))) {
+        console.error(`Skipping extension outside directory: ${entry}`);
+        continue;
+      }
 
       // Load .js and .mjs files
       if (entry.endsWith('.js') || entry.endsWith('.mjs')) {
         try {
-          const url = pathToFileURL(resolve(fullPath)).href;
+          const url = pathToFileURL(fullPath).href;
           const mod = (await import(url)) as ExtensionModule;
           if (typeof mod.default === 'function') {
             await mod.default(this.createContext());

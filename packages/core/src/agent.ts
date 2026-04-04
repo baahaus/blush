@@ -8,6 +8,7 @@ import type {
   ToolUseContent,
 } from '@blushagent/ai';
 import { UsageTracker, compressToolOutput } from '@blushagent/ai';
+import { Value } from '@sinclair/typebox/value';
 import { coreTools, findTool, getToolDefinitions, type CoreTool } from './tools/index.js';
 import { assembleContext } from './context.js';
 import { ExtensionManager } from './extensions.js';
@@ -113,7 +114,19 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
         result = `Error: Unknown tool: ${toolUse.name}`;
       } else {
         try {
-          result = await tool.execute(toolUse.input);
+          // Validate tool input against schema before execution
+          const schema = tool.input_schema;
+          if (schema && typeof schema === 'object' && 'type' in schema) {
+            const errors = [...Value.Errors(schema as Parameters<typeof Value.Errors>[0], toolUse.input)];
+            if (errors.length > 0) {
+              const details = errors.slice(0, 5).map((e) => `${e.path}: ${e.message}`).join('; ');
+              result = `Error: Invalid parameters for ${toolUse.name}: ${details}`;
+            } else {
+              result = await tool.execute(toolUse.input);
+            }
+          } else {
+            result = await tool.execute(toolUse.input);
+          }
         } catch (err) {
           result = `Error executing ${toolUse.name}: ${(err as Error).message}`;
         }
@@ -167,6 +180,8 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
     let lastToolSignature = '';
     let repeatedToolSignatureCount = 0;
     let forceFinalResponse = false;
+    let compactionCount = 0;
+    const MAX_COMPACTIONS_PER_SEND = 3;
 
     // Agent loop: send -> tool calls -> send results -> repeat
     while (true) {
@@ -177,8 +192,9 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
 
       const messages = getActiveMessages(session);
 
-      // Auto-compact when context grows too large
-      if (estimateTokens(messages) > AUTO_COMPACT_TOKENS && messages.length > 6) {
+      // Auto-compact when context grows too large (with guard against infinite loop)
+      if (estimateTokens(messages) > AUTO_COMPACT_TOKENS && messages.length > 6 && compactionCount < MAX_COMPACTIONS_PER_SEND) {
+        compactionCount++;
         const summaryParts: string[] = [];
         // Keep last 4 messages intact, summarize the rest
         const toSummarize = messages.slice(0, -4);
@@ -341,12 +357,17 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
     }
   }
 
-  // Close MCP connections on process exit
+  // Close MCP connections on process exit (use once() to avoid listener accumulation)
   if (mcpConnections.length > 0) {
-    const cleanup = () => { closeMCPConnections(mcpConnections).catch(() => {}); };
-    process.on('exit', cleanup);
-    process.on('SIGINT', cleanup);
-    process.on('SIGTERM', cleanup);
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      closeMCPConnections(mcpConnections).catch(() => {});
+    };
+    process.once('exit', cleanup);
+    process.once('SIGINT', cleanup);
+    process.once('SIGTERM', cleanup);
   }
 
   return {

@@ -28,15 +28,39 @@ export async function bash(params: BashParams): Promise<string> {
         return `Command blocked by safety check: ${classification.reason || 'potentially dangerous'}\nCommand: ${command}`;
       }
     } catch {
-      // If sidecar unavailable, allow the command
+      // If sidecar unavailable, log a warning but still allow the command
+      // to avoid breaking the user's workflow. The safety check is defense-in-depth.
+      process.stderr.write('Warning: bash safety sidecar unavailable, proceeding without safety check\n');
     }
   }
 
   return new Promise((resolve) => {
+    // Filter sensitive environment variables from child process
+    const SENSITIVE_ENV_PATTERNS = [
+      /^ANTHROPIC_API_KEY$/i,
+      /^OPENAI_API_KEY$/i,
+      /^BLUSH_OAUTH_TOKEN$/i,
+      /^BRAVE_SEARCH_API_KEY$/i,
+      /^SERPAPI_API_KEY$/i,
+      /^TAVILY_API_KEY$/i,
+      /^AWS_SECRET_ACCESS_KEY$/i,
+      /^GITHUB_TOKEN$/i,
+      /^GH_TOKEN$/i,
+      /^NPM_TOKEN$/i,
+      /.*_SECRET$/i,
+      /.*_PASSWORD$/i,
+    ];
+    const filteredEnv: Record<string, string> = {};
+    for (const [key, value] of Object.entries(process.env)) {
+      if (value !== undefined && !SENSITIVE_ENV_PATTERNS.some((p) => p.test(key))) {
+        filteredEnv[key] = value;
+      }
+    }
+
     const proc = spawn('bash', ['-c', command], {
       cwd: cwd || process.cwd(),
       timeout,
-      env: { ...process.env },
+      env: filteredEnv,
     });
 
     let stdout = '';

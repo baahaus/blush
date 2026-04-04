@@ -18,11 +18,33 @@ export interface MCPConnection {
   close(): Promise<void>;
 }
 
+/** Filter sensitive keys from env before passing to MCP subprocesses. */
+function filterSensitiveEnv(base: NodeJS.ProcessEnv): Record<string, string> {
+  const SENSITIVE = [
+    /^ANTHROPIC_API_KEY$/i,
+    /^OPENAI_API_KEY$/i,
+    /^BLUSH_OAUTH_TOKEN$/i,
+    /^AWS_SECRET_ACCESS_KEY$/i,
+    /^GITHUB_TOKEN$/i,
+    /^GH_TOKEN$/i,
+    /^NPM_TOKEN$/i,
+    /.*_SECRET$/i,
+    /.*_PASSWORD$/i,
+  ];
+  const filtered: Record<string, string> = {};
+  for (const [key, value] of Object.entries(base)) {
+    if (value !== undefined && !SENSITIVE.some((p) => p.test(key))) {
+      filtered[key] = value;
+    }
+  }
+  return filtered;
+}
+
 export async function connectMCPServer(config: MCPServerConfig): Promise<MCPConnection> {
   const transport = new StdioClientTransport({
     command: config.command,
     args: config.args,
-    env: config.env ? { ...process.env, ...config.env } as Record<string, string> : undefined,
+    env: config.env ? { ...filterSensitiveEnv(process.env), ...config.env } : undefined,
     cwd: config.cwd,
     stderr: 'pipe',
   });

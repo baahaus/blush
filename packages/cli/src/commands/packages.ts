@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import { execFile } from 'node:child_process';
 import { cp, mkdir, readdir, readFile, rm, unlink, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { promisify } from 'node:util';
 import { renderLine, renderError } from '@blushagent/tui';
@@ -24,7 +24,10 @@ interface PackageManifest {
 }
 
 function sanitizePackageDirName(name: string): string {
-  return name.replace(/[@/:]/g, '__');
+  // Replace common package name characters and strip path traversal sequences
+  const sanitized = name.replace(/[@/:]/g, '__').replace(/\.\./g, '_');
+  // Ensure the result doesn't start with a dot or dash (hidden files / flags)
+  return sanitized.replace(/^[.-]+/, '_');
 }
 
 async function loadManifest(): Promise<PackageManifest> {
@@ -135,19 +138,31 @@ export async function installPackage(source: string): Promise<void> {
   try {
     if (source.startsWith('npm:')) {
       packageName = source.slice(4);
-      installPath = join(PACKAGES_DIR, sanitizePackageDirName(packageName));
+      installPath = resolve(join(PACKAGES_DIR, sanitizePackageDirName(packageName)));
+      if (!installPath.startsWith(PACKAGES_DIR)) {
+        renderError(`Invalid package name (path traversal blocked): ${packageName}`);
+        return;
+      }
       renderLine(chalk.dim(`Installing ${packageName} from npm...`));
       await installNpmPackage(packageName, installPath);
     } else if (source.startsWith('git:')) {
       const url = source.slice(4);
       packageName = url.split('/').pop()?.replace(/\.git$/, '') || source;
-      installPath = join(PACKAGES_DIR, sanitizePackageDirName(packageName));
+      installPath = resolve(join(PACKAGES_DIR, sanitizePackageDirName(packageName)));
+      if (!installPath.startsWith(PACKAGES_DIR)) {
+        renderError(`Invalid package name (path traversal blocked): ${packageName}`);
+        return;
+      }
       renderLine(chalk.dim(`Cloning ${url}...`));
       await syncGitPackage(url, installPath);
     } else if (source.includes('/') && !source.includes(':')) {
       const url = `https://github.com/${source}.git`;
       packageName = source.split('/')[1] || source;
-      installPath = join(PACKAGES_DIR, sanitizePackageDirName(packageName));
+      installPath = resolve(join(PACKAGES_DIR, sanitizePackageDirName(packageName)));
+      if (!installPath.startsWith(PACKAGES_DIR)) {
+        renderError(`Invalid package name (path traversal blocked): ${packageName}`);
+        return;
+      }
       resolvedSource = `git:${url}`;
       renderLine(chalk.dim(`Cloning ${source} from GitHub...`));
       await syncGitPackage(url, installPath);

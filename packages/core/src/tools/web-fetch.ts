@@ -50,6 +50,36 @@ function formatBody(contentType: string, body: string, maxChars: number): {
   };
 }
 
+/**
+ * Check if a hostname resolves to a private/reserved IP range (SSRF protection).
+ */
+function isPrivateHostname(hostname: string): boolean {
+  // Block obvious private/reserved hostnames
+  const blocked = [
+    'localhost',
+    '127.0.0.1',
+    '0.0.0.0',
+    '::1',
+    '[::1]',
+    'metadata.google.internal',
+  ];
+  if (blocked.includes(hostname.toLowerCase())) return true;
+
+  // Block link-local and cloud metadata IPs
+  const ipMatch = hostname.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (ipMatch) {
+    const [, a, b] = ipMatch.map(Number);
+    if (a === 10) return true;                         // 10.0.0.0/8
+    if (a === 172 && b >= 16 && b <= 31) return true;  // 172.16.0.0/12
+    if (a === 192 && b === 168) return true;            // 192.168.0.0/16
+    if (a === 169 && b === 254) return true;            // 169.254.0.0/16 (link-local + cloud metadata)
+    if (a === 127) return true;                         // 127.0.0.0/8
+    if (a === 0) return true;                           // 0.0.0.0/8
+  }
+
+  return false;
+}
+
 export async function webFetch(params: WebFetchParams): Promise<string> {
   const { url, max_chars = 12000, timeout_ms = 15000 } = params;
 
@@ -62,6 +92,11 @@ export async function webFetch(params: WebFetchParams): Promise<string> {
 
   if (!['http:', 'https:'].includes(parsed.protocol)) {
     return `Error: Unsupported URL protocol: ${parsed.protocol}`;
+  }
+
+  // SSRF protection: block requests to private/internal networks
+  if (isPrivateHostname(parsed.hostname)) {
+    return `Error: Requests to private/internal network addresses are blocked: ${parsed.hostname}`;
   }
 
   try {

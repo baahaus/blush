@@ -1,6 +1,7 @@
 import { Type, type Static } from '@sinclair/typebox';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, lstat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 export const EditParams = Type.Object({
   file_path: Type.String({ description: 'Absolute path to the file to edit' }),
@@ -13,9 +14,20 @@ export type EditParams = Static<typeof EditParams>;
 
 export async function edit(params: EditParams): Promise<string> {
   const { file_path, old_string, new_string, replace_all = false } = params;
+  const resolved = resolve(file_path);
 
-  if (!existsSync(file_path)) {
+  if (!existsSync(resolved)) {
     return `Error: File not found: ${file_path}`;
+  }
+
+  // Symlink check: prevent edits through symlinks that could target arbitrary files
+  try {
+    const stat = await lstat(resolved);
+    if (stat.isSymbolicLink()) {
+      return `Error: Refusing to edit through symlink: ${file_path}`;
+    }
+  } catch {
+    // stat failed, will be caught below
   }
 
   if (old_string === new_string) {
@@ -23,7 +35,7 @@ export async function edit(params: EditParams): Promise<string> {
   }
 
   try {
-    const content = await readFile(file_path, 'utf-8');
+    const content = await readFile(resolved, 'utf-8');
 
     if (!content.includes(old_string)) {
       return `Error: old_string not found in ${file_path}`;
