@@ -13,6 +13,7 @@ export {
   listSessionSummaries,
   deleteSession,
   sessionDir,
+  getCurrentGitBranch,
   type Session,
   type SessionEntry,
   type SessionSummary,

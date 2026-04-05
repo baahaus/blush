@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import type { Message } from '@blushagent/ai';
 
 const SESSIONS_DIR = join(homedir(), '.blush', 'sessions');
@@ -21,6 +22,7 @@ export interface Session {
   entries: SessionEntry[];
   currentBranch: string; // ID of the latest entry in the active branch
   title?: string;
+  gitBranch?: string; // Git branch active when the session was last saved
 }
 
 export interface SessionSummary {
@@ -33,6 +35,7 @@ export interface SessionSummary {
   activeMessageCount: number;
   title: string;
   model?: string;
+  gitBranch?: string;
 }
 
 function encodeCwd(cwd: string): string {
@@ -174,7 +177,7 @@ export async function saveSession(session: Session): Promise<void> {
   await mkdir(dir, { recursive: true });
   const path = join(dir, `${session.id}.jsonl`);
 
-  const meta = JSON.stringify({ _meta: true, title: session.title || '' });
+  const meta = JSON.stringify({ _meta: true, title: session.title || '', gitBranch: session.gitBranch || '' });
   const lines = session.entries.map((e) => JSON.stringify(e)).join('\n');
   await writeFile(path, meta + '\n' + lines + '\n', 'utf-8');
 }
@@ -192,6 +195,7 @@ export async function loadSession(cwd: string, sessionId: string): Promise<Sessi
     .filter(Boolean);
 
   let title: string | undefined;
+  let gitBranch: string | undefined;
   const entryLines: string[] = [];
 
   for (const line of lines) {
@@ -199,6 +203,7 @@ export async function loadSession(cwd: string, sessionId: string): Promise<Sessi
       const parsed = JSON.parse(line);
       if (parsed._meta) {
         title = parsed.title || undefined;
+        gitBranch = parsed.gitBranch || undefined;
       } else {
         entryLines.push(line);
       }
@@ -225,6 +230,7 @@ export async function loadSession(cwd: string, sessionId: string): Promise<Sessi
     entries,
     currentBranch: lastEntry?.id || '',
     title,
+    gitBranch,
   };
 }
 
@@ -284,6 +290,7 @@ function summarizeSession(session: Session): SessionSummary {
     activeMessageCount: activeMessages.length,
     title,
     model: extractModel(session),
+    gitBranch: session.gitBranch,
   };
 }
 
@@ -310,4 +317,18 @@ export async function deleteSession(cwd: string, sessionId: string): Promise<boo
   if (!existsSync(path)) return false;
   await unlink(path);
   return true;
+}
+
+export function getCurrentGitBranch(cwd: string): string | undefined {
+  try {
+    const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+      cwd,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 2000,
+      encoding: 'utf-8',
+    }).trim();
+    return branch && branch !== 'HEAD' ? branch : undefined;
+  } catch {
+    return undefined;
+  }
 }

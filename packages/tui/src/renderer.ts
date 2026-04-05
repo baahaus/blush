@@ -130,12 +130,12 @@ const ROW_CURVES = [
  * A 3-row mirrored mountain of block shades with a bright pulse traveling through.
  * Renders through the layout system's header zone so it doesn't fight redraws.
  */
-export function startGradientBreathing(width: number): void {
+export function startGradientBreathing(_width?: number): void {
   if (prefersReducedMotion() || gradientTimer) return;
-  const w = Math.min(width - 4, 60);
 
   gradientTimer = setInterval(() => {
     if (!isLayoutActive()) return;
+    const w = (process.stdout.columns || 80) - 4;
     gradientPhase = (gradientPhase + 0.012) % 1.0;
     const theme = getTheme();
     const rows = animatedGradientBlock(w, theme.border, theme.prompt, gradientPhase);
@@ -242,7 +242,7 @@ export async function renderWelcome(
   session = 'new session',
 ): Promise<void> {
   const theme = getTheme();
-  const w = Math.min(process.stdout.columns || 80, 64);
+  const w = process.stdout.columns || 80;
 
   // Letter-spaced wordmark with gradient
   const wordmark = 'b l u s h'.split('').map((c, i) => {

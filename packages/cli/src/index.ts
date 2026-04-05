@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import { basename } from 'node:path';
+import { createInterface } from 'node:readline';
 import { loadConfig, resolveProvider, updateConfig, estimateCost, generateSessionTitle, type Message, type StreamEvent } from '@blushagent/ai';
 import {
   createAgent,
@@ -10,6 +11,7 @@ import {
   getActiveMessages,
   listBranches,
   switchBranch,
+  getCurrentGitBranch,
   SkillRegistry,
   type SessionSummary,
   type MCPConnection,
@@ -212,6 +214,11 @@ function renderSessionBrowser(sessions: SessionSummary[], currentSessionId?: str
       : chalk.hex(theme.text).bold(title);
     const tag = isCurrent ? chalk.hex(theme.prompt)('  current') : '';
 
+    // Build branch badge (inline with title)
+    const branchBadge = session.gitBranch
+      ? `  ${chalk.hex(theme.accent)(sym.branch)} ${chalk.hex(theme.accent)(session.gitBranch)}`
+      : '';
+
     // Build metadata line
     const metaParts: string[] = [];
     metaParts.push(`${session.entryCount} message${session.entryCount === 1 ? '' : 's'}`);
@@ -221,7 +228,7 @@ function renderSessionBrowser(sessions: SessionSummary[], currentSessionId?: str
     }
     const meta = metaParts.join(` ${sym.dot} `);
 
-    renderLine(`  ${marker}  ${titleFmt}${tag}`);
+    renderLine(`  ${marker}  ${titleFmt}${branchBadge}${tag}`);
     renderLine(`       ${chalk.hex(theme.muted)(meta)}`);
     renderLine('');
   }
@@ -405,8 +412,45 @@ export async function run(): Promise<void> {
   let existingSession: Awaited<ReturnType<typeof loadSession>> | undefined = undefined;
   if (opts.resume || opts.sessionId) {
     const sessions = await listSessionSummaries(cwd);
-    const targetId = opts.sessionId || sessions[0]?.id;
-    if (targetId) {
+
+    if (opts.sessionId) {
+      // Explicit session ID — load it directly
+      const loaded = await loadSession(cwd, opts.sessionId);
+      if (loaded) {
+        existingSession = loaded;
+      } else {
+        renderDim(`  Session not found: ${opts.sessionId}, starting new`);
+      }
+    } else if (sessions.length === 0) {
+      renderDim('  No sessions yet. Starting new session.');
+    } else if (sessions.length === 1) {
+      // Single session — resume it directly, clearly identified
+      const s = sessions[0];
+      const branchNote = s.gitBranch ? `  ${chalk.hex(getTheme().accent)(sym.branch)} ${s.gitBranch}` : '';
+      renderDim(`  Resuming: ${chalk.bold(s.title)}  ${formatRelativeTime(s.updatedAt)}${branchNote}`);
+      const loaded = await loadSession(cwd, s.id);
+      if (loaded) existingSession = loaded;
+    } else {
+      // Multiple sessions — show picker and prompt for selection
+      renderSessionBrowser(sessions);
+      const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: false });
+      const answer = await new Promise<string>((resolve) => {
+        process.stdout.write(`  Resume session (1–${sessions.length}, Enter for most recent) › `);
+        rl.once('line', (line) => resolve(line));
+      });
+      rl.close();
+      renderLine('');
+
+      const trimmed = answer.trim();
+      let targetId: string;
+      if (!trimmed) {
+        targetId = sessions[0].id;
+      } else if (/^\d+$/.test(trimmed)) {
+        targetId = sessions[Number(trimmed) - 1]?.id || sessions[0].id;
+      } else {
+        targetId = trimmed;
+      }
+
       const loaded = await loadSession(cwd, targetId);
       if (loaded) {
         existingSession = loaded;
@@ -637,6 +681,7 @@ export async function run(): Promise<void> {
       },
     });
     activeSession = agent.session;
+    agent.session.gitBranch = getCurrentGitBranch(cwd);
 
     const mcpToolCount = agent.mcpTools?.length || 0;
     if (mcpToolCount > 0) {
