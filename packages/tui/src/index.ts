@@ -77,6 +77,12 @@ export {
 export { StreamMarkdown } from './stream-markdown.js';
 
 export {
+  renderDiff,
+  renderDiffConfirmPrompt,
+  waitForDiffConfirm,
+} from './diff.js';
+
+export {
   pause,
   prefersReducedMotion,
   typeOut,

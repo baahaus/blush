@@ -21,6 +21,8 @@ export interface BlushConfig {
   default_provider?: string;
   favorite_models?: string[];
   mcpServers?: MCPServerEntry[];
+  /** Show a unified diff and require confirmation before applying file writes. Default: true. */
+  diff_first?: boolean;
 }
 
 // Backward-compatible alias for older imports.

@@ -48,6 +48,9 @@ import {
   resetLayout,
   sym,
   StreamMarkdown,
+  renderDiff,
+  renderDiffConfirmPrompt,
+  waitForDiffConfirm,
 } from '@blushagent/tui';
 import {
   btw,
@@ -103,6 +106,7 @@ interface CliOptions {
   resume?: boolean;
   sessionId?: string;
   newSession?: boolean;
+  diffFirst?: boolean;
 }
 
 function formatRelativeTime(timestamp: number): string {
@@ -137,9 +141,12 @@ function matchingCompletions(line: string, candidates: string[]): string[] {
 
 function parseArgs(args: string[]): CliOptions {
   const config = loadConfig();
+  // diff_first defaults to true unless explicitly disabled in config or via env
+  const configDiffFirst = config.diff_first !== false && process.env.BLUSH_NO_DIFF !== '1';
   const opts: CliOptions = {
     model: process.env.BLUSH_MODEL || config.default_model || 'claude-sonnet-4-20250514',
     theme: config.default_theme,
+    diffFirst: configDiffFirst,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -162,6 +169,10 @@ function parseArgs(args: string[]): CliOptions {
       opts.rpc = true;
     } else if (arg === '--json') {
       opts.json = true;
+    } else if (arg === '--diff') {
+      opts.diffFirst = true;
+    } else if (arg === '--no-diff') {
+      opts.diffFirst = false;
     } else if (arg === '--version' || arg === '-v') {
       console.log(`blush ${VERSION}`);
       process.exit(0);
@@ -276,6 +287,8 @@ function printHelp(): void {
     ['  blush -s, --session <id>', 'Resume specific session'],
     ['  blush -m <model>', 'Set model'],
     ['  blush -t, --theme <name>', 'Set color theme'],
+    ['  blush --no-diff', 'Skip diff preview, apply writes immediately'],
+    ['  blush --diff', 'Force diff-first mode (default)'],
   ]);
 
   renderLine('');
@@ -685,6 +698,35 @@ export async function run(): Promise<void> {
         spinner.start('thinking');
         spinner.impulse();
       },
+      onToolConfirm: opts.diffFirst && !quietStreamOutput
+        ? async (name, toolInput, diff) => {
+            spinner.stop();
+            clearToolActivity();
+            if (!assistantLineStart) renderText('\n');
+            assistantLineStart = true;
+            assistantCol = 0;
+
+            const filePath = (toolInput as { file_path?: string }).file_path ?? '';
+            const isNew = name === 'write' && diff === '';
+
+            if (diff) {
+              renderDiff(diff);
+            }
+            renderDiffConfirmPrompt(filePath, isNew);
+
+            const confirmed = await waitForDiffConfirm();
+
+            renderLine('');
+            if (confirmed) {
+              // Resume spinner — tool will execute normally
+              spinner.start('thinking');
+            } else {
+              renderDim('  skipped');
+              spinner.start('thinking');
+            }
+            return confirmed;
+          }
+        : undefined,
     });
     activeSession = agent.session;
     agent.session.gitBranch = getCurrentGitBranch(cwd);

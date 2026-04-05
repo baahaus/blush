@@ -37,6 +37,12 @@ export interface AgentConfig {
   onStream?: (event: StreamEvent) => void;
   onToolStart?: (name: string, input: Record<string, unknown>) => void;
   onToolEnd?: (name: string, result: string) => void;
+  /**
+   * Called before a write or edit tool executes. Receives the tool name,
+   * its input, and a unified diff string (empty string for new files).
+   * Return true to proceed, false to skip the operation.
+   */
+  onToolConfirm?: (name: string, input: Record<string, unknown>, diff: string) => Promise<boolean>;
 }
 
 export interface Agent {
@@ -50,7 +56,7 @@ export interface Agent {
 }
 
 export async function createAgent(config: AgentConfig): Promise<Agent> {
-  const { provider, model, cwd, onStream, onToolStart, onToolEnd } = config;
+  const { provider, model, cwd, onStream, onToolStart, onToolEnd, onToolConfirm } = config;
   const tools = config.tools || coreTools;
   const usage = new UsageTracker();
   const session = config.session || await createSession(cwd);
@@ -112,6 +118,41 @@ export async function createAgent(config: AgentConfig): Promise<Agent> {
       if (!tool) {
         result = `Error: Unknown tool: ${toolUse.name}`;
       } else {
+        // Diff-first mode: show proposed changes before writing files
+        if (onToolConfirm && (toolUse.name === 'write' || toolUse.name === 'edit')) {
+          let diff = '';
+          try {
+            const inp = toolUse.input as Record<string, unknown>;
+            if (toolUse.name === 'write') {
+              const { computeWriteDiff } = await import('./tools/diff.js');
+              diff = await computeWriteDiff(inp.file_path as string, inp.content as string);
+            } else {
+              const { computeEditDiff } = await import('./tools/diff.js');
+              diff = await computeEditDiff(
+                inp.file_path as string,
+                inp.old_string as string,
+                inp.new_string as string,
+                Boolean(inp.replace_all),
+              );
+            }
+          } catch {
+            // Non-fatal: proceed without diff if computation fails
+          }
+
+          const confirmed = await onToolConfirm(toolUse.name, toolUse.input, diff);
+          if (!confirmed) {
+            result = 'Operation skipped by user.';
+            onToolEnd?.(toolUse.name, result);
+            await extensions.emit('tool:after', { name: toolUse.name, result });
+            results.push({
+              type: 'tool_result',
+              tool_use_id: toolUse.call_id || toolUse.id,
+              content: result,
+            });
+            continue;
+          }
+        }
+
         try {
           result = await tool.execute(toolUse.input);
         } catch (err) {
